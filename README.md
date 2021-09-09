@@ -4,10 +4,13 @@
 
 This repo is used to program practical CNN hardware accelerators on FPGA boards. It contains the entire pipeline from model quantization and evaluation to behavioural hardware description.
 
-## Required Tools and Hardware
+## Tested With
 
-- Vivado
+- Vivado 2019.2
 - FPGA
+- Python 3.8
+- CUDA 11.1 (Optional, only for GPU support)
+- Ubuntu 20.04
 
 ## Setup
 
