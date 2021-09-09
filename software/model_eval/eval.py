@@ -16,7 +16,7 @@ annType = 'bbox'
 prefix = 'instances'
 
 #initialize COCO ground truth api
-dataDir='../coco'
+dataDir='../../coco'
 dataType='val2017'
 annFile = '%s/annotations/%s_%s.json'%(dataDir,prefix,dataType)
 cocoGt=COCO(annFile)

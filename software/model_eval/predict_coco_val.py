@@ -12,8 +12,8 @@ import argparse
 import os
 
 # Constants
-path2data = "../coco/val2017"
-path2json = "../coco/annotations/instances_val2017.json"
+path2data = "../../coco/val2017"
+path2json = "../../coco/annotations/instances_val2017.json"
 standard_models = ['mobilenetv3-large', 'mobilenetv3-small', 'faster-rcnn']
 coco_val = dset.CocoDetection(root=path2data, annFile=path2json)
 
