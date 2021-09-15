@@ -14,7 +14,7 @@ import os
 # Constants
 path2data = "../../coco/val2017"
 path2json = "../../coco/annotations/instances_val2017.json"
-standard_models = ['mobilenetv3-large', 'mobilenetv3-small', 'faster-rcnn']
+standard_models = ['mobilenetv3-large', 'faster-rcnn']
 coco_val = dset.CocoDetection(root=path2data, annFile=path2json)
 
 # define the computation device
@@ -30,8 +30,6 @@ def get_model(model_path):
         if model_path == standard_models[0]:
             model = torchvision.models.detection.ssdlite320_mobilenet_v3_large(pretrained=True)
         elif model_path == standard_models[1]:
-            model = torchvision.models.detection.ssdlite320_mobilenet_v3_small(pretrained=True)
-        elif model_path == standard_models[2]:
             model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
 
     # load the model onto the computation device
