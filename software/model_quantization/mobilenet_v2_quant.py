@@ -14,21 +14,16 @@ import torch.quantization
 
 # # Setup warnings
 import warnings
-warnings.filterwarnings(
-    action='ignore',
-    category=DeprecationWarning,
-    module=r'.*'
-)
-warnings.filterwarnings(
-    action='default',
-    module=r'torch.quantization'
-)
+
+warnings.filterwarnings(action="ignore", category=DeprecationWarning, module=r".*")
+warnings.filterwarnings(action="default", module=r"torch.quantization")
 
 # Specify random seed for repeatable results
 torch.manual_seed(191009)
 
 
 from torch.quantization import QuantStub, DeQuantStub
+
 
 def _make_divisible(v, divisor, min_value=None):
     """
@@ -54,10 +49,18 @@ class ConvBNReLU(nn.Sequential):
     def __init__(self, in_planes, out_planes, kernel_size=3, stride=1, groups=1):
         padding = (kernel_size - 1) // 2
         super(ConvBNReLU, self).__init__(
-            nn.Conv2d(in_planes, out_planes, kernel_size, stride, padding, groups=groups, bias=False),
+            nn.Conv2d(
+                in_planes,
+                out_planes,
+                kernel_size,
+                stride,
+                padding,
+                groups=groups,
+                bias=False,
+            ),
             nn.BatchNorm2d(out_planes, momentum=0.1),
             # Replace with ReLU
-            nn.ReLU(inplace=False)
+            nn.ReLU(inplace=False),
         )
 
 
@@ -74,13 +77,15 @@ class InvertedResidual(nn.Module):
         if expand_ratio != 1:
             # pw
             layers.append(ConvBNReLU(inp, hidden_dim, kernel_size=1))
-        layers.extend([
-            # dw
-            ConvBNReLU(hidden_dim, hidden_dim, stride=stride, groups=hidden_dim),
-            # pw-linear
-            nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
-            nn.BatchNorm2d(oup, momentum=0.1),
-        ])
+        layers.extend(
+            [
+                # dw
+                ConvBNReLU(hidden_dim, hidden_dim, stride=stride, groups=hidden_dim),
+                # pw-linear
+                nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
+                nn.BatchNorm2d(oup, momentum=0.1),
+            ]
+        )
         self.conv = nn.Sequential(*layers)
         # Replace torch.add with floatfunctional
         self.skip_add = nn.quantized.FloatFunctional()
@@ -93,7 +98,13 @@ class InvertedResidual(nn.Module):
 
 
 class MobileNetV2(nn.Module):
-    def __init__(self, num_classes=1000, width_mult=1.0, inverted_residual_setting=None, round_nearest=8):
+    def __init__(
+        self,
+        num_classes=1000,
+        width_mult=1.0,
+        inverted_residual_setting=None,
+        round_nearest=8,
+    ):
         """
         MobileNet V2 main class
         Args:
@@ -121,20 +132,29 @@ class MobileNetV2(nn.Module):
             ]
 
         # only check the first element, assuming user knows t,c,n,s are required
-        if len(inverted_residual_setting) == 0 or len(inverted_residual_setting[0]) != 4:
-            raise ValueError("inverted_residual_setting should be non-empty "
-                             "or a 4-element list, got {}".format(inverted_residual_setting))
+        if (
+            len(inverted_residual_setting) == 0
+            or len(inverted_residual_setting[0]) != 4
+        ):
+            raise ValueError(
+                "inverted_residual_setting should be non-empty "
+                "or a 4-element list, got {}".format(inverted_residual_setting)
+            )
 
         # building first layer
         input_channel = _make_divisible(input_channel * width_mult, round_nearest)
-        self.last_channel = _make_divisible(last_channel * max(1.0, width_mult), round_nearest)
+        self.last_channel = _make_divisible(
+            last_channel * max(1.0, width_mult), round_nearest
+        )
         features = [ConvBNReLU(3, input_channel, stride=2)]
         # building inverted residual blocks
         for t, c, n, s in inverted_residual_setting:
             output_channel = _make_divisible(c * width_mult, round_nearest)
             for i in range(n):
                 stride = s if i == 0 else 1
-                features.append(block(input_channel, output_channel, stride, expand_ratio=t))
+                features.append(
+                    block(input_channel, output_channel, stride, expand_ratio=t)
+                )
                 input_channel = output_channel
         # building last several layers
         features.append(ConvBNReLU(input_channel, self.last_channel, kernel_size=1))
@@ -151,7 +171,7 @@ class MobileNetV2(nn.Module):
         # weight initialization
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out')
+                nn.init.kaiming_normal_(m.weight, mode="fan_out")
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
             elif isinstance(m, nn.BatchNorm2d):
@@ -176,15 +196,19 @@ class MobileNetV2(nn.Module):
     def fuse_model(self):
         for m in self.modules():
             if type(m) == ConvBNReLU:
-                torch.quantization.fuse_modules(m, ['0', '1', '2'], inplace=True)
+                torch.quantization.fuse_modules(m, ["0", "1", "2"], inplace=True)
             if type(m) == InvertedResidual:
                 for idx in range(len(m.conv)):
                     if type(m.conv[idx]) == nn.Conv2d:
-                        torch.quantization.fuse_modules(m.conv, [str(idx), str(idx + 1)], inplace=True)
+                        torch.quantization.fuse_modules(
+                            m.conv, [str(idx), str(idx + 1)], inplace=True
+                        )
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
-    def __init__(self, name, fmt=':f'):
+
+    def __init__(self, name, fmt=":f"):
         self.name = name
         self.fmt = fmt
         self.reset()
@@ -202,7 +226,7 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
     def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
+        fmtstr = "{name} {val" + self.fmt + "} ({avg" + self.fmt + "})"
         return fmtstr.format(**self.__dict__)
 
 
@@ -225,8 +249,8 @@ def accuracy(output, target, topk=(1,)):
 
 def evaluate(model, criterion, data_loader, neval_batches):
     model.eval()
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
+    top1 = AverageMeter("Acc@1", ":6.2f")
+    top5 = AverageMeter("Acc@5", ":6.2f")
     cnt = 0
     with torch.no_grad():
         for image, target in data_loader:
@@ -234,86 +258,98 @@ def evaluate(model, criterion, data_loader, neval_batches):
             loss = criterion(output, target)
             cnt += 1
             acc1, acc5 = accuracy(output, target, topk=(1, 5))
-            print('.', end = '')
+            print(".", end="")
             top1.update(acc1[0], image.size(0))
             top5.update(acc5[0], image.size(0))
             if cnt >= neval_batches:
-                 return top1, top5
+                return top1, top5
 
     return top1, top5
+
 
 def load_model(model_file):
     model = MobileNetV2()
     state_dict = torch.load(model_file)
     model.load_state_dict(state_dict)
-    model.to('cpu')
+    model.to("cpu")
     return model
+
 
 def print_size_of_model(model):
     torch.save(model.state_dict(), "temp.p")
-    print('Size (MB):', os.path.getsize("temp.p")/1e6)
-    os.remove('temp.p')
+    print("Size (MB):", os.path.getsize("temp.p") / 1e6)
+    os.remove("temp.p")
 
 
 def prepare_data_loaders(data_path):
 
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(
+        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+    )
     dataset = torchvision.datasets.ImageNet(
-           data_path, split="train",
-         transforms.Compose([
-                   transforms.RandomResizedCrop(224),
-                   transforms.RandomHorizontalFlip(),
-                   transforms.ToTensor(),
-                   normalize,
-               ]))
+        data_path,
+        "train",
+        transforms.Compose(
+            [
+                transforms.RandomResizedCrop(224),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        ),
+    )
     dataset_test = torchvision.datasets.ImageNet(
-          data_path, split="val",
-              transforms.Compose([
-                  transforms.Resize(256),
-                  transforms.CenterCrop(224),
-                  transforms.ToTensor(),
-                  normalize,
-              ]))
+        data_path,
+        "val",
+        transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        ),
+    )
 
     train_sampler = torch.utils.data.RandomSampler(dataset)
     test_sampler = torch.utils.data.SequentialSampler(dataset_test)
 
     data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=train_batch_size,
-        sampler=train_sampler)
+        dataset, batch_size=train_batch_size, sampler=train_sampler
+    )
 
     data_loader_test = torch.utils.data.DataLoader(
-        dataset_test, batch_size=eval_batch_size,
-        sampler=test_sampler)
+        dataset_test, batch_size=eval_batch_size, sampler=test_sampler
+    )
 
     return data_loader, data_loader_test
 
-data_path = '~/.data/imagenet'
-saved_model_dir = 'data/'
-float_model_file = 'mobilenet_pretrained_float.pth'
-scripted_float_model_file = 'mobilenet_quantization_scripted.pth'
-scripted_quantized_model_file = 'mobilenet_quantization_scripted_quantized.pth'
+
+data_path = "/home/bossebandowski/thesis/imagenet"
+saved_model_dir = "/home/bossebandowski/thesis/models/"
+float_model_file = "mobilenet_pretrained_float.pth"
+scripted_float_model_file = "mobilenet_quantization_scripted.pth"
+scripted_quantized_model_file = "mobilenet_quantization_scripted_quantized.pth"
 
 train_batch_size = 30
 eval_batch_size = 50
 
 data_loader, data_loader_test = prepare_data_loaders(data_path)
 criterion = nn.CrossEntropyLoss()
-float_model = load_model(saved_model_dir + float_model_file).to('cpu')
+float_model = load_model(saved_model_dir + float_model_file).to("cpu")
 
 # Next, we'll "fuse modules"; this can both make the model faster by saving on memory access
 # while also improving numerical accuracy. While this can be used with any model, this is
 # especially common with quantized models.
 
-print('\n Inverted Residual Block: Before fusion \n\n', float_model.features[1].conv)
+print("\n Inverted Residual Block: Before fusion \n\n", float_model.features[1].conv)
 float_model.eval()
 
 # Fuses modules
 float_model.fuse_model()
 
 # Note fusion of Conv+BN+Relu and Conv+Relu
-print('\n Inverted Residual Block: After fusion\n\n',float_model.features[1].conv)
+print("\n Inverted Residual Block: After fusion\n\n", float_model.features[1].conv)
 
 
 num_eval_batches = 1000
@@ -321,6 +357,13 @@ num_eval_batches = 1000
 print("Size of baseline model")
 print_size_of_model(float_model)
 
-top1, top5 = evaluate(float_model, criterion, data_loader_test, neval_batches=num_eval_batches)
-print('Evaluation accuracy on %d images, %2.2f'%(num_eval_batches * eval_batch_size, top1.avg))
-torch.jit.save(torch.jit.script(float_model), saved_model_dir + scripted_float_model_file)
+top1, top5 = evaluate(
+    float_model, criterion, data_loader_test, neval_batches=num_eval_batches
+)
+print(
+    "Evaluation accuracy on %d images, %2.2f"
+    % (num_eval_batches * eval_batch_size, top1.avg)
+)
+torch.jit.save(
+    torch.jit.script(float_model), saved_model_dir + scripted_float_model_file
+)

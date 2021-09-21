@@ -1,9 +1,9 @@
 *.class
 *.log
 
-coco/*
-playground.py
 *__pycache__*
 software/model_eval/outputs/*
 models/*
+datasets/*
 tmp/*
+*.pt
