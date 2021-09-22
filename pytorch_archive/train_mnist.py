@@ -7,6 +7,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 import os
+import numpy as np
 
 from mnist_model import Net
 
@@ -149,22 +150,41 @@ def run_training(args, device):
     torch.save(model.state_dict(), DEFAULT_MODEL_PATH)
 
 
+def get_mnist_examples(amount=1):
+    mnist = datasets.MNIST(
+        os.path.join(BASE_PATH, "datasets"),
+        download=False,
+        train=False,
+        transform=transforms.ToTensor(),
+    )
+    num_observations, _, _ = mnist.data.size()
+    out = []
+    print(f"num observations: {num_observations}")
+    for _ in range(amount):
+        idx = np.random.randint(num_observations)
+        out.append(mnist.__getitem__(idx))
+
+    return out
+
+
 def load_model(device, path=DEFAULT_MODEL_PATH):
     model = Net().to(device)
 
-    # optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
-
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint)
-    # optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
-    return model  # , optimizer
+    return model
 
 
-def load_data(train_kwargs, test_kwargs):
+def load_data(train_kwargs={"batch_size": 64}, test_kwargs={"batch_size": 100}):
+
+    """
     transform = transforms.Compose(
         [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
     )
+    """
+
+    transform = transforms.ToTensor()
 
     dataset1 = datasets.MNIST(
         os.path.join(BASE_PATH, "datasets"),
