@@ -22,6 +22,7 @@ print("shape:", output_details[0]["shape"])
 print("type:", output_details[0]["dtype"])
 
 tensor_details = interpreter.get_tensor_details()
+names = []
 
 for dict in tensor_details:
     i = dict["index"]
@@ -29,8 +30,7 @@ for dict in tensor_details:
     scales = dict["quantization_parameters"]["scales"]
     zero_points = dict["quantization_parameters"]["zero_points"]
     tensor = interpreter.tensor(i)()
-
-    print(i, tensor_name, dict["shape"])
+    names.append(tensor_name)
 
 print("num tensors:", len(tensor_details))
 
