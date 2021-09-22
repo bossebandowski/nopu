@@ -18,10 +18,11 @@ This repo is used to program practical CNN hardware accelerators on FPGA boards.
 ```
 python3 -m venv venv
 source venv/bin/activate
+pip install -U pip cython setuptools wheel
 ```
-- Install pytorch according to your environment: https://pytorch.org/, f.x.
+- Install tensorflow
 ```
-pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
+pip install tensorflow
 ```
 - Install other requirements
 ```
