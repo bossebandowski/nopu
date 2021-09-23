@@ -8,6 +8,8 @@ parameter extraction: https://blog.xmartlabs.com/2019/11/22/TFlite-to-CoreML/
 
 # standard libs
 import logging
+import pathlib
+import argparse
 
 logging.getLogger("tensorflow").setLevel(logging.DEBUG)
 
@@ -20,8 +22,8 @@ import tensorflow as tf
 import numpy as np
 
 # constants
-MODEL_SAVE_PATH = "/tmp/mnist_tflite_models/mnist_model.pt"
-QUANT_MODEL_SAVE_PATH = "/tmp/mnist_tflite_models/mnist_model_quant.tflite"
+MODEL_SAVE_PATH = "../models/mnist_model.pt"
+QUANT_MODEL_SAVE_PATH = "../models/mnist_model_quant.tflite"
 
 
 """
@@ -31,7 +33,8 @@ Quantization Helper Functions
 """
 
 
-def representative_data_gen(train_images):
+def representative_data_gen():
+    (train_images, _), (_, _) = data_loader.load_mnist()
     for input_value in (
         tf.data.Dataset.from_tensor_slices(train_images).batch(1).take(100)
     ):
@@ -69,6 +72,21 @@ def run_tflite_model(tflite_file, test_image_indices, test_set):
     return predictions
 
 
+def save_model(model):
+    tf.keras.models.save_model(model, MODEL_SAVE_PATH)
+
+
+def load_model():
+    return tf.keras.models.load_model(MODEL_SAVE_PATH)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train", action="store_true", help="train a new model")
+    args = vars(parser.parse_args())
+    return args
+
+
 """
 ============================================================================================
 Main Functions
@@ -94,9 +112,7 @@ def train(train_set, test_set, model):
     return model
 
 
-def quantize(train_set, test_set, model):
-    train_images, train_labels = train_set
-    test_images, test_labels = test_set
+def quantize(model):
 
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
@@ -116,14 +132,14 @@ def quantize(train_set, test_set, model):
     print("output: ", output_type)
 
     # Save the quantized model:
-    QUANT_MODEL_SAVE_PATH.write_bytes(tflite_model_quant)
+    pathlib.Path(QUANT_MODEL_SAVE_PATH).write_bytes(tflite_model_quant)
 
 
 def evaluate_model(model_type, test_set):
     test_images, test_labels = test_set
 
     test_image_indices = range(test_images.shape[0])
-    predictions = run_tflite_model(QUANT_MODEL_SAVE_PATH, test_image_indices)
+    predictions = run_tflite_model(QUANT_MODEL_SAVE_PATH, test_image_indices, test_set)
 
     accuracy = (np.sum(test_labels == predictions) * 100) / len(test_images)
 
@@ -134,12 +150,19 @@ def evaluate_model(model_type, test_set):
 
 
 if __name__ == "__main__":
+    args = parse_args()
     # load training data
     train_set, test_set = data_loader.load_mnist()
-    # load model
-    model = models.basic_conv_model
-    model.summary()
-    # train model
-    train(train_set, test_set, model)
-    quantize(train_set, test_set, model)
-    evaluate_model(model_type="Quantized")
+
+    if args["train"]:
+        # load model architecture
+        model = models.basic_conv_model
+        model.summary()
+        # train model
+        train(train_set, test_set, model)
+        save_model(model)
+    else:
+        model = load_model()
+
+    quantize(model)
+    evaluate_model("Quantized", test_set)
