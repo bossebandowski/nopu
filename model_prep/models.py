@@ -1,5 +1,7 @@
 import tensorflow as tf
 
+DESCRIPTOR_LIST = ["basic_fc", "basic_conv"]
+
 basic_fc_model = tf.keras.Sequential(
     [
         tf.keras.layers.Flatten(input_shape=(28, 28, 1)),
@@ -19,3 +21,12 @@ basic_conv_model = tf.keras.Sequential(
         tf.keras.layers.Dense(10),
     ]
 )
+
+
+def get_model(descriptor):
+    if descriptor == "basic_conv":
+        return basic_conv_model
+    elif descriptor == "basic_fc":
+        return basic_fc_model
+    else:
+        raise ValueError("Model descriptor unknown!")

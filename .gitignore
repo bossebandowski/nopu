@@ -2,8 +2,18 @@
 *.log
 
 *__pycache__*
-software/model_eval/outputs/*
-models/*
-datasets/*
-tmp/*
+model_prep/model_eval/outputs/*
+model_prep/models/*
+model_prep/datasets/*
+model_prep/tmp/*
 *.pt
+aegean
+argo
+compiler-rt
+gold
+llvm
+local
+misc
+newlib
+poseidon
+simulator

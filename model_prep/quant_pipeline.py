@@ -24,7 +24,7 @@ import numpy as np
 # constants
 MODEL_SAVE_PATH = "../models/mnist_model.pt"
 QUANT_MODEL_SAVE_PATH = "../models/mnist_model_quant.tflite"
-
+MODELS = models.DESCRIPTOR_LIST
 
 """
 ============================================================================================
@@ -83,6 +83,13 @@ def load_model():
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", action="store_true", help="train a new model")
+    parser.add_argument(
+        "-m",
+        "--model",
+        type=str,
+        default="basic_conv",
+        help="specify which model to train. Choose between " + str(MODELS),
+    )
     args = vars(parser.parse_args())
     return args
 
@@ -155,8 +162,9 @@ if __name__ == "__main__":
     train_set, test_set = data_loader.load_mnist()
 
     if args["train"]:
+        descriptor = args["model"]
         # load model architecture
-        model = models.basic_conv_model
+        model = models.get_model(descriptor)
         model.summary()
         # train model
         train(train_set, test_set, model)
