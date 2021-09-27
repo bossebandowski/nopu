@@ -14,6 +14,26 @@ This repo is used to program practical CNN hardware accelerators on FPGA boards.
 
 ## Setup
 
+- Build patmos
+follow the instructions on `https://github.com/t-crest/patmos`
+
+- Clone this repo and copy nopu project files into the right patmos locations
+```
+TCRESTPATH=$HOME/t-crest
+PATMOSPATH=$TCRESTPATH/patmos
+
+git clone https://github.com/bossebandowski/nopu.git
+cd nopu
+
+cp hardware_src/Accelerator.scala $PATMOSPATH/hardware/src/main/scala/io/
+cp hardware_src/MemorySInt.scala $PATMOSPATH/hardware/src/main/scala/util/
+cp hardware_src/build.sbt $PATMOSPATH/hardware
+
+cp -r hardware_test/accelerator $PATMOSPATH/c/
+cp hardware_test/accelerator_main.c $PATMOSPATH/c/
+
+```
+
 - Create venv
 ```
 python3 -m venv venv
@@ -39,6 +59,17 @@ pip install -r requirements.txt
 ### Evaluate Model
 
 ### Extract Model Parameters
+
+### Emulate Accelerator
+
+To run the accelerator on the patmos emulator, do
+
+```
+cd $PATMOSPATH
+make clean tools emulator
+make comp APP=accelerator_main
+patemu tmp/accelerator_main.elf
+```
 
 ### Generate Accelerator Code
 
