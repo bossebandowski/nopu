@@ -3,7 +3,7 @@ import numpy as np
 from tensorflow.python.keras.layers import Lambda
 
 footer = "};"
-network_path = "/tmp/mnist_tflite_models/mnist_model_quant.tflite"
+network_path = "/home/bossebandowski/thesis/model_prep/models/mnist_model_quant.tflite"
 
 interpreter = tf.lite.Interpreter(model_path=str(network_path))
 interpreter.allocate_tensors()
@@ -35,29 +35,40 @@ for dict in tensor_details:
 print("num tensors:", len(tensor_details))
 
 
-def get_variable(interpreter, index, transposed=False):
-    var = interpreter.get_tensor(index)
-    if transposed:
-        var = np.transpose(var, (1, 0))
-    return var
-
-
 def extract_weights(interpreter):
     params = []
 
     for i in range(2, int(len(tensor_details) / 2)):
-        params.append(get_variable(interpreter, i))
+        params.append(interpreter.get_tensor(i))
 
     return params
 
 
-params = extract_weights(interpreter)
+def save_conv_weights(fname, weights, padding=0):
+    c_out, dim_x, dim_y, c_in = weights.shape
 
-for i, layer in enumerate(params):
-    print(i + 2, layer.dtype, layer.shape)
+    if padding == 0:
+        out = (
+            "const int8_t "
+            + fname
+            + "["
+            + str(c_out * dim_x * dim_y * c_in)
+            + "] = {\n\t"
+        )
+        for a in range(c_out):
+            for b in range(dim_x):
+                for c in range(dim_y):
+                    for d in range(c_in):
+                        out += str(weights[a, b, c, d]) + ",\n\t"
+        out = out[:-3] + "\n" + footer
+    else:
+        raise (ValueError("padding parameter must be 0"))
+
+    with open("../tmp/" + fname + ".c", "w") as f:
+        f.write(out)
 
 
-def save_weights(fname, weights):
+def save_fc_weights(fname, weights):
     len_x, len_y = weights.shape
     out = "const int8_t " + fname + "[" + str(len_x * len_y) + "] = {\n\t"
     for x in range(len_x):
@@ -78,16 +89,18 @@ def save_biases(fname, biases):
         f.write(out)
 
 
-"""
-save_weights("weights_1", w1)
-save_weights("weights_2", w2)
+params = extract_weights(interpreter)
 
-save_biases("biases_1", b1)
-save_biases("biases_2", b2)
-
-
-
-"""
+for i, layer in enumerate(params):
+    print(i, layer.dtype, layer.shape)
+    if len(layer.shape) == 4:
+        save_conv_weights(f"{i}_w_conv", layer)
+    elif len(layer.shape) == 2:
+        save_fc_weights(f"{i}_w_fc", layer)
+    elif len(layer.shape) == 1:
+        save_biases(f"{i}_b", layer)
+    else:
+        raise (ValueError("Layer type not recognized. Check dim"))
 
 mnist = tf.keras.datasets.mnist
 (train_images, train_labels), (_, _) = mnist.load_data()

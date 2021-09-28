@@ -10,6 +10,7 @@ parameter extraction: https://blog.xmartlabs.com/2019/11/22/TFlite-to-CoreML/
 import logging
 import pathlib
 import argparse
+import os
 
 logging.getLogger("tensorflow").setLevel(logging.DEBUG)
 
@@ -23,7 +24,7 @@ import numpy as np
 
 # constants
 MODEL_SAVE_PATH = "../models/mnist_model.pt"
-QUANT_MODEL_SAVE_PATH = "../models/mnist_model_quant.tflite"
+QUANT_MODEL_SAVE_PATH = "../models/"
 MODELS = models.DESCRIPTOR_LIST
 
 """
@@ -119,19 +120,20 @@ def train(train_set, test_set, model):
     return model
 
 
-def quantize(model):
+def quantize_8x32(model, path):
 
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = representative_data_gen
-    # Ensure that if any ops can't be quantized, the converter throws an error
     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+
     # Set the input and output tensors to uint8 (APIs added in r2.3)
     converter.inference_input_type = tf.uint8
     converter.inference_output_type = tf.uint8
 
     tflite_model_quant = converter.convert()
 
+    # check i/o
     interpreter = tf.lite.Interpreter(model_content=tflite_model_quant)
     input_type = interpreter.get_input_details()[0]["dtype"]
     print("input: ", input_type)
@@ -139,14 +141,39 @@ def quantize(model):
     print("output: ", output_type)
 
     # Save the quantized model:
-    pathlib.Path(QUANT_MODEL_SAVE_PATH).write_bytes(tflite_model_quant)
+    pathlib.Path(path).write_bytes(tflite_model_quant)
 
 
-def evaluate_model(model_type, test_set):
+def quantize_8x16(model, path):
+    converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.representative_dataset = representative_data_gen
+    converter.target_spec.supported_ops = [
+        tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8
+    ]
+
+    # Set the input and output tensors to uint8 (APIs added in r2.3)
+    # converter.inference_input_type = tf.int16
+    # converter.inference_output_type = tf.int16
+
+    tflite_model_quant = converter.convert()
+
+    # check i/o
+    interpreter = tf.lite.Interpreter(model_content=tflite_model_quant)
+    input_type = interpreter.get_input_details()[0]["dtype"]
+    print("input: ", input_type)
+    output_type = interpreter.get_output_details()[0]["dtype"]
+    print("output: ", output_type)
+
+    # Save the quantized model:
+    pathlib.Path(path).write_bytes(tflite_model_quant)
+
+
+def evaluate_model(model_type, test_set, path):
     test_images, test_labels = test_set
 
     test_image_indices = range(test_images.shape[0])
-    predictions = run_tflite_model(QUANT_MODEL_SAVE_PATH, test_image_indices, test_set)
+    predictions = run_tflite_model(path, test_image_indices, test_set)
 
     accuracy = (np.sum(test_labels == predictions) * 100) / len(test_images)
 
@@ -172,5 +199,14 @@ if __name__ == "__main__":
     else:
         model = load_model()
 
-    quantize(model)
-    evaluate_model("Quantized", test_set)
+    path32 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model.tflite")
+    path16 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x16_model.tflite")
+    quantize_8x32(model, path32)
+    evaluate_model("q8x32", test_set, path32)
+
+    print("=============================================")
+    print("=============================================")
+    print("=============================================")
+
+    quantize_8x16(model, path16)
+    evaluate_model("q8x16", test_set, path16)
