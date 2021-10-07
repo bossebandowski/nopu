@@ -13,7 +13,7 @@
   <bus roundRobinArbiter="true" />
   
   <Coprocessors>
-    <Coprocessor Name="MySimpleCoprocessor" CoprocessorID="0" requiresMemoryAccess="True" />
+    <Coprocessor Name="CnnAccelerator" CoprocessorID="0" requiresMemoryAccess="True" />
   </Coprocessors>
 
   <ExtMem size="2M" DevTypeRef="Sram16" />

@@ -11,14 +11,14 @@ import patmos.Constants._
 import util._
 import ocp._
 
-object MySimpleCoprocessor extends CoprocessorObject {
+object CnnAccelerator extends CoprocessorObject {
     
   def init(params: Map[String, String]) = {}
 
-  def create(params: Map[String, String]): MySimpleCoprocessor = Module(new MySimpleCoprocessor())
+  def create(params: Map[String, String]): CnnAccelerator = Module(new CnnAccelerator())
 }
 
-class MySimpleCoprocessor() extends CoprocessorMemoryAccess() {
+class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
     // coprocessor function definitions
     val FUNC_RESET            = "b00000".U(5.W)   // reset coprocessor
@@ -27,6 +27,7 @@ class MySimpleCoprocessor() extends CoprocessorMemoryAccess() {
     val FUNC_MEM_W            = "b00011".U(5.W)   // TEST: write a value into memory
     val FUNC_MEM_R            = "b00101".U(5.W)   // TEST: read a value from memory
     val FUNC_GET_RES          = "b00100".U(5.W)   // TEST: read a result
+    val FUNC_LOAD_M           = "b10000".U(5.W)   // TMP: PATMOS SHOULD BE RESPONSIBLE FOR LOADING THE MODEL. REMOVE HERE
 
     // states COP
     val idle :: start :: restart :: running :: mem_w :: mem_r :: Nil = Enum(UInt(), 6)
@@ -36,26 +37,21 @@ class MySimpleCoprocessor() extends CoprocessorMemoryAccess() {
     val memIdle :: memDone :: memReadReq :: memRead :: memWriteReq :: memWrite :: Nil = Enum(UInt(), 6)
     val memState = RegInit(memIdle)
 
-    val isIdle = Wire(Bool())
-  
-    // default values
-    io.copOut.result := 0.U
-    io.copOut.ena_out := Bool(false)
-    val resReg = RegInit(10.U(DATA_WIDTH.W))
-
-    // tmp regs
+    // auxiliary registers
     val addrReg = RegInit(0.U(DATA_WIDTH.W))
-    val valReg = RegInit(0.U(DATA_WIDTH.W))
-
+    val resReg = RegInit(10.U(DATA_WIDTH.W))
     val mem_w_buffer = Reg(Vec(BURST_LENGTH, UInt(DATA_WIDTH.W)))
     val mem_r_buffer = Reg(Vec(BURST_LENGTH, UInt(DATA_WIDTH.W)))
     val burst_count_reg = RegInit(0.U(3.W))
 
+    /* ============================================ CMD HANDLING ============================================ */ 
 
+    val isIdle = Wire(Bool())
     isIdle := stateReg === idle && memState === memIdle
 
-
-    /* ============================================ CMD HANDLING ============================================ */ 
+    // default values
+    io.copOut.result := 0.U
+    io.copOut.ena_out := Bool(false)
 
     // start operation
     when(io.copIn.trigger && io.copIn.ena_in) {
@@ -87,7 +83,6 @@ class MySimpleCoprocessor() extends CoprocessorMemoryAccess() {
                 is(FUNC_MEM_W) {
                     when(isIdle) {
                         addrReg := io.copIn.opData(0)
-                        valReg := io.copIn.opData(1)
 
                         mem_w_buffer(0) := io.copIn.opData(1)
                         mem_w_buffer(1) := io.copIn.opData(1) + 1.U
@@ -164,7 +159,6 @@ class MySimpleCoprocessor() extends CoprocessorMemoryAccess() {
         mem_r_buffer := Vec(Seq(0.U, 0.U, 0.U, 0.U))
         mem_w_buffer := Vec(Seq(0.U, 0.U, 0.U, 0.U))
         addrReg := 0.U
-        valReg := 0.U
 
         io.copOut.result := 0.U
         io.copOut.ena_out := Bool(false)

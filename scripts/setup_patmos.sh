@@ -4,10 +4,10 @@ PATMOSPATH=$HOME/t-crest/patmos
 set -e
 
 # copy src files
-cp hardware_src/MySimpleCoprocessor.scala $PATMOSPATH/hardware/src/main/scala/cop/
+cp hardware_src/CnnAccelerator.scala $PATMOSPATH/hardware/src/main/scala/cop/
 
 # copy test scripts
-cp hardware_test/my_simple_test.c $PATMOSPATH/c/
+cp hardware_test/test.c $PATMOSPATH/c/
 
 # copy config
 cp hardware_config/altde2-115.xml $PATMOSPATH/hardware/config/

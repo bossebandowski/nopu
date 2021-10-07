@@ -90,8 +90,13 @@ int main(int argc, char **argv)
     int res = cop_get_res();
     printf("result: %d\n", res);
     printf("testing memory...\n");
+
     int addr = 5;
-    int val = 65537;
+    int val = 222;
+    printf("writing %d into addr %d\n", val, addr);
+
+    cop_mem_w(addr, val);
+    cop_busy_wait();
 
     for (int i = 0; i < 4; i++)
     {
