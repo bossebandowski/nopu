@@ -19,6 +19,7 @@ follow the instructions on `https://github.com/t-crest/patmos`
 
 - Clone this repo and copy nopu project files into the right patmos locations
 ```
+chmod +x ./scripts/*.sh
 ./scripts/setup_patmos.sh
 ```
 
