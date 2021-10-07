@@ -6,10 +6,10 @@ This repo is used to program practical CNN hardware accelerators on FPGA boards.
 
 ## Tested With
 
-- Vivado 2019.2
-- FPGA
+- Quartus 2019.1
+- Altera de2-115
 - Python 3.8
-- CUDA 11.1 (Optional, only for GPU support)
+- CUDA 11.1 (Optional, only for GPU support during network prep)
 - Ubuntu 20.04
 
 ## Setup
@@ -19,20 +19,7 @@ follow the instructions on `https://github.com/t-crest/patmos`
 
 - Clone this repo and copy nopu project files into the right patmos locations
 ```
-TCRESTPATH=$HOME/t-crest
-PATMOSPATH=$TCRESTPATH/patmos
-
-git clone https://github.com/bossebandowski/nopu.git
-cd nopu
-
-cp hardware_src/Accelerator.scala $PATMOSPATH/hardware/src/main/scala/io/
-cp hardware_src/MemorySInt.scala $PATMOSPATH/hardware/src/main/scala/util/
-# cp hardware_src/build.sbt $PATMOSPATH/hardware
-
-cp -r hardware_test/accelerator $PATMOSPATH/c/
-cp hardware_test/accelerator_main.c $PATMOSPATH/c/
-
-cp hardware_config/altde2-115.xml $PATMOSPATH/hardware/config/
+./scripts/setup_patmos.sh
 ```
 
 - Create venv
@@ -66,16 +53,27 @@ pip install -r requirements.txt
 To run the accelerator on the patmos emulator, do
 
 ```
-cd $PATMOSPATH
-make clean tools emulator
-make comp APP=accelerator_main
-patemu tmp/accelerator_main.elf
+./scripts/run_patemu.sh
 ```
 
-### Generate Accelerator Code
 
-### Synthesize Accelerator
+### Synthesize and Program Accelerator
 
-### Program Accelerator
+First, generate the vhdl code
+```
+cd ~/t-crest/patmos
+make gen
+```
+
+Then, use quartus to open
+```
+~/t-crest/patmos/hardware/quartus/altde2-115/patmos.qpf
+```
+Then follow the standard procedure for compilation and programming.
+Alternatively, use the patmos cli like so:
+
+```
+make BOOTAPP=bootable-bootloader APP=\<app_name> tools comp gen synth config download
+```
 
 ## Acknowledgements
