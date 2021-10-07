@@ -4,7 +4,7 @@ PATMOSPATH=$HOME/t-crest/patmos
 set -e
 
 # copy src files
-cp hardware_src/MySimpleCoprocessor.scala $PATMOSPATH/hardware/src/main/scala/io/
+cp hardware_src/MySimpleCoprocessor.scala $PATMOSPATH/hardware/src/main/scala/cop/
 
 # copy test scripts
 cp hardware_test/my_simple_test.c $PATMOSPATH/c/
