@@ -29,11 +29,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val FUNC_GET_RES          = "b00100".U(5.W)   // TEST: read a result
     val FUNC_LOAD_M           = "b10000".U(5.W)   // TMP: PATMOS SHOULD BE RESPONSIBLE FOR LOADING THE MODEL. REMOVE HERE
 
-
-    // system constants
-
     // states COP
-    
     val idle :: start :: restart :: running :: mem_w :: mem_r :: Nil = Enum(UInt(), 6)
     val stateReg = Reg(init = idle)
 
@@ -87,11 +83,17 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 is(FUNC_MEM_W) {
                     when(isIdle) {
                         addrReg := io.copIn.opData(0)
+
                         mem_w_buffer(0) := io.copIn.opData(1)
+                        mem_w_buffer(1) := io.copIn.opData(1) + 1.U
+                        mem_w_buffer(2) := io.copIn.opData(1) + 2.U
+                        mem_w_buffer(3) := io.copIn.opData(1) + 3.U
+
                         stateReg := mem_w
                     }
                 }
                 is(FUNC_MEM_R) {
+                
                     when(isIdle) {
                         addrReg := io.copIn.opData(0)
                         stateReg := mem_r
@@ -205,7 +207,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(memWrite) {
-            io.memPort.M.Data := mem_w_buffer(0)//mem_w_buffer(burst_count_reg);
+            io.memPort.M.Data := mem_w_buffer(burst_count_reg);
             io.memPort.M.DataValid := 1.U
             when(io.memPort.S.DataAccept === 1.U) {
                 burst_count_reg := burst_count_reg + 1.U

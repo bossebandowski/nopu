@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
+#include "accelerator/parameters.h"
 
 // reset coprocessor seed
 void cop_reset()
@@ -29,6 +30,7 @@ void cop_busy_wait()
 void cop_run()
 {
     asm(".word 0x3440001"); // unpredicated COP_WRITE to COP0 with FUNC = 00010, RA = 00000, RB = 00000
+    cop_busy_wait();
 }
 
 int cop_get_res()
@@ -62,6 +64,8 @@ void cop_mem_w(int addr, int val)
     // regA     10000
     // regB     10001
     // post     0000001
+
+    cop_busy_wait();
 }
 
 void cop_mem_r(int addr)
@@ -77,34 +81,122 @@ void cop_mem_r(int addr)
     // regA     10000
     // regB     00000
     // post     0000001
+
+    cop_busy_wait();
+}
+
+void load_nn()
+{
+    // set fixed address pointers (starting indices of arrays)
+    int *img = (int *)30;
+    int *w1p = (int *)900;
+    int *w2p = (int *)80000;
+    int *b1p = (int *)82000;
+    int *b2p = (int *)83000;
+
+    // copy arrays to target memory space
+    memcpy(w1p, weights_1, sizeof(weights_1));
+    memcpy(w2p, weights_2, sizeof(weights_2));
+    memcpy(b1p, biases_1, sizeof(biases_1));
+    memcpy(b2p, biases_2, sizeof(biases_2));
+}
+
+void nn_check()
+{
+
+    int weights_base_address = 900;
+    int biases_base_address = 82000;
+
+    int weight_ids[5] = {0, 100, 1000, 10000, 20000};
+    int bias_ids[5] = {0, 25, 50, 75, 100};
+
+    int rsp = 0;
+    for (int i = 0; i < 5; i++)
+    {
+        // cop_mem_r((weight_ids[i]) + weights_base_address);
+        cop_mem_r((weight_ids[i] << 2) + weights_base_address);
+        rsp = cop_get_res();
+        printf("Expected: %d, Read: %d \n", weights_1[i], rsp);
+
+        // cop_mem_r((bias_ids[i]) + biases_base_address);
+        cop_mem_r((bias_ids[i] << 2) + biases_base_address);
+        rsp = cop_get_res();
+        printf("Expected: %ld, Read: %d \n", biases_1[i], rsp);
+    }
+
+    printf("==================\n");
+    printf("network check done\n");
+    printf("==================\n");
+}
+
+void load_nn_test()
+{
+    printf("starting network load test...\n");
+    printf("resetting cop...\n");
+    cop_reset();
+    printf("loading network...\n");
+    load_nn();
+    printf("done.\nVerifying...\n");
+    nn_check();
+}
+
+void dumpit()
+{
+    for (int a = 790; a < 820; a++)
+    {
+        cop_mem_r(a);
+        printf("%d : %x\n", a, cop_get_res());
+    }
+}
+
+void memory_test()
+{
+    cop_mem_w(800, 0x11223344);
+    dumpit();
+
+    cop_mem_w(804, 0x55667788);
+    dumpit();
+
+    cop_mem_w(808, 0x99aabbcc);
+    dumpit();
+
+    cop_mem_w(812, 0xddeeff00);
+    dumpit();
+}
+
+void pat_acc_mem_test()
+{
+    for (int i = 796; i < 813; i += 4)
+    {
+        // set mem value in patmos
+        *(uint32_t *)i = i;
+    }
+    // read with accelerator and print
+    dumpit();
+}
+
+void print_default_locations()
+{
+    int w1p = (int)&weights_1[0];
+    int w2p = (int)&weights_2[0];
+    int b1p = (int)&biases_1[0];
+    int b2p = (int)&biases_2[0];
+    int imgp = (int)&img_0_1[0];
+    printf("the first weight of the 1st layer %d is stored at address %u\n", weights_1[0], w1p);
+    printf("the first weight of the 2nd layer %d is stored at address %u\n", weights_2[0], w2p);
+    printf("the first bias of the 1st layer %ld is stored at address %u\n", biases_1[0], b1p);
+    printf("the first bias of the 2nd layer %ld is stored at address %u\n", biases_2[0], b2p);
+    printf("the first pixel of the first image %d is stored at address %u\n", img_0_1[0], imgp);
 }
 
 int main(int argc, char **argv)
 {
-    printf("starting a simple cop test...\n");
-    printf("resetting cop...\n");
-    cop_reset();
-    printf("run...\n");
-    cop_run();
-    cop_busy_wait();
-    int res = cop_get_res();
-    printf("result: %d\n", res);
-    printf("testing memory...\n");
 
-    int addr = 5;
-    int val = 222;
-    printf("writing %d into addr %d\n", val, addr);
+    load_nn();
 
-    cop_mem_w(addr, val);
-    cop_busy_wait();
-
-    for (int i = 0; i < 4; i++)
-    {
-        cop_mem_r(addr + 4 * i);
-        cop_busy_wait();
-        res = cop_get_res();
-        printf("read %d from address %d\n", res, addr + 4 * i);
-    }
-
+    cop_mem_r(900);
+    printf("%d-%d : %d\n", 900, 903, cop_get_res() >> 24);
+    // memory_test();
+    //pat_acc_mem_test();
     return 0;
 }

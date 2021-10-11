@@ -7,6 +7,7 @@ set -e
 cp hardware_src/CnnAccelerator.scala $PATMOSPATH/hardware/src/main/scala/cop/
 
 # copy test scripts
+cp -r hardware_test/accelerator $PATMOSPATH/c/
 cp hardware_test/test.c $PATMOSPATH/c/
 
 # copy config

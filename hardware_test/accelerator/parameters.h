@@ -1,7 +1,7 @@
 #include <stdint.h>
 //File to define the constants of the Neural Network
 
-const int weights_1[78400] = {
+const int8_t weights_1[78400] = {
 	-5,
 	-7,
 	-11,
@@ -78401,10 +78401,9 @@ const int weights_1[78400] = {
 	-2,
 	2,
 	11,
-	-10
-};
+	-10};
 
-const int weights_2[1000] = {
+const int8_t weights_2[1000] = {
 	-4,
 	-16,
 	22,
@@ -79404,10 +79403,9 @@ const int weights_2[1000] = {
 	23,
 	18,
 	16,
-	-31
-};
+	-31};
 
-const int biases_1[100] = {
+const int32_t biases_1[100] = {
 	-4094,
 	2053,
 	-1515,
@@ -79507,10 +79505,9 @@ const int biases_1[100] = {
 	-2114,
 	-832,
 	3359,
-	2997
-};
+	2997};
 
-const int biases_2[10] = {
+const int32_t biases_2[10] = {
 	-285,
 	27,
 	-41,
@@ -79520,9 +79517,7 @@ const int biases_2[10] = {
 	-74,
 	-277,
 	276,
-	-97
-};
-
+	-97};
 
 const int img_0_1[784] = {
 	0,
@@ -80308,8 +80303,7 @@ const int img_0_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_0_2[784] = {
 	0,
@@ -81095,9 +81089,7 @@ const int img_0_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
-
+	0};
 
 const int img_0_3[784] = {
 	0,
@@ -81883,8 +81875,7 @@ const int img_0_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_0_4[784] = {
 	0,
@@ -82670,8 +82661,7 @@ const int img_0_4[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_1_1[784] = {
 	0,
@@ -83457,8 +83447,7 @@ const int img_1_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_1_2[784] = {
 	0,
@@ -84244,8 +84233,7 @@ const int img_1_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_1_3[784] = {
 	0,
@@ -85031,8 +85019,7 @@ const int img_1_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_1_4[784] = {
 	0,
@@ -85818,8 +85805,7 @@ const int img_1_4[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_1_5[784] = {
 	0,
@@ -86605,8 +86591,7 @@ const int img_1_5[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_1_6[784] = {
 	0,
@@ -87392,8 +87377,7 @@ const int img_1_6[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_1_7[784] = {
 	0,
@@ -88179,8 +88163,7 @@ const int img_1_7[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_2_1[784] = {
 	0,
@@ -88966,8 +88949,7 @@ const int img_2_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_2_2[784] = {
 	0,
@@ -89753,8 +89735,7 @@ const int img_2_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_2_3[784] = {
 	0,
@@ -90540,8 +90521,7 @@ const int img_2_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_2_4[784] = {
 	0,
@@ -91327,8 +91307,7 @@ const int img_2_4[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_3_1[784] = {
 	0,
@@ -92114,8 +92093,7 @@ const int img_3_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_3_2[784] = {
 	0,
@@ -92901,8 +92879,7 @@ const int img_3_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_3_3[784] = {
 	0,
@@ -93688,8 +93665,7 @@ const int img_3_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_3_4[784] = {
 	0,
@@ -94475,8 +94451,7 @@ const int img_3_4[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_3_5[784] = {
 	0,
@@ -95262,8 +95237,7 @@ const int img_3_5[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_3_6[784] = {
 	0,
@@ -96049,8 +96023,7 @@ const int img_3_6[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_3_7[784] = {
 	0,
@@ -96836,8 +96809,7 @@ const int img_3_7[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_4_1[784] = {
 	0,
@@ -97623,8 +97595,7 @@ const int img_4_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_4_2[784] = {
 	0,
@@ -98410,8 +98381,7 @@ const int img_4_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_4_3[784] = {
 	0,
@@ -99197,8 +99167,7 @@ const int img_4_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_4_4[784] = {
 	0,
@@ -99984,8 +99953,7 @@ const int img_4_4[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_5_1[784] = {
 	0,
@@ -100771,8 +100739,7 @@ const int img_5_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_5_2[784] = {
 	0,
@@ -101558,8 +101525,7 @@ const int img_5_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_5_3[784] = {
 	0,
@@ -102345,8 +102311,7 @@ const int img_5_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_5_4[784] = {
 	0,
@@ -103132,8 +103097,7 @@ const int img_5_4[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_6_1[784] = {
 	0,
@@ -103919,8 +103883,7 @@ const int img_6_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_6_2[784] = {
 	0,
@@ -104706,8 +104669,7 @@ const int img_6_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_6_3[784] = {
 	0,
@@ -105493,8 +105455,7 @@ const int img_6_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_6_4[784] = {
 	0,
@@ -106280,8 +106241,7 @@ const int img_6_4[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_6_5[784] = {
 	0,
@@ -107067,8 +107027,7 @@ const int img_6_5[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_7_1[784] = {
 	0,
@@ -107854,8 +107813,7 @@ const int img_7_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_7_2[784] = {
 	0,
@@ -108641,8 +108599,7 @@ const int img_7_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_7_3[784] = {
 	0,
@@ -109428,8 +109385,7 @@ const int img_7_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_7_4[784] = {
 	0,
@@ -110215,8 +110171,7 @@ const int img_7_4[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_8_1[784] = {
 	0,
@@ -111002,8 +110957,7 @@ const int img_8_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_8_2[784] = {
 	0,
@@ -111789,8 +111743,7 @@ const int img_8_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_8_3[784] = {
 	0,
@@ -112576,8 +112529,7 @@ const int img_8_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_9_1[784] = {
 	0,
@@ -113363,8 +113315,7 @@ const int img_9_1[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_9_2[784] = {
 	0,
@@ -114150,8 +114101,7 @@ const int img_9_2[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_9_3[784] = {
 	0,
@@ -114937,8 +114887,7 @@ const int img_9_3[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_9_4[784] = {
 	0,
@@ -115724,8 +115673,7 @@ const int img_9_4[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_9_5[784] = {
 	0,
@@ -116511,8 +116459,7 @@ const int img_9_5[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_9_6[784] = {
 	0,
@@ -117298,8 +117245,7 @@ const int img_9_6[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
 const int img_9_7[784] = {
 	0,
@@ -118085,18 +118031,17 @@ const int img_9_7[784] = {
 	0,
 	0,
 	0,
-	0
-};
+	0};
 
-const int* picture_0 = img_0_1;
-const int* picture_1 = img_1_1;
-const int* picture_2 = img_2_1;
-const int* picture_3 = img_3_1;
-const int* picture_4 = img_4_1;
-const int* picture_5 = img_5_1;
-const int* picture_6 = img_6_1;
-const int* picture_7 = img_7_1;
-const int* picture_8 = img_8_1;
-const int* picture_9 = img_9_1;
+const int *picture_0 = img_0_1;
+const int *picture_1 = img_1_1;
+const int *picture_2 = img_2_1;
+const int *picture_3 = img_3_1;
+const int *picture_4 = img_4_1;
+const int *picture_5 = img_5_1;
+const int *picture_6 = img_6_1;
+const int *picture_7 = img_7_1;
+const int *picture_8 = img_8_1;
+const int *picture_9 = img_9_1;
 
-const int* picture = img_0_1;
+const int *picture = img_0_1;
