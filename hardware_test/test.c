@@ -88,7 +88,6 @@ void cop_mem_r(int addr)
 void load_nn()
 {
     // set fixed address pointers (starting indices of arrays)
-    int *img = (int *)30;
     int *w1p = (int *)900;
     int *w2p = (int *)80000;
     int *b1p = (int *)82000;
@@ -189,14 +188,23 @@ void print_default_locations()
     printf("the first pixel of the first image %d is stored at address %u\n", img_0_1[0], imgp);
 }
 
+void load_img(int id)
+{
+    int *img = (int *)30;
+    memcpy(img, img_0_1, sizeof(img_0_1));
+}
+
 int main(int argc, char **argv)
 {
-
+    // load nn parameters into desired memory space. In the future, this will be copying from flash to sram
     load_nn();
 
-    cop_mem_r(900);
-    printf("%d-%d : %d\n", 900, 903, cop_get_res() >> 24);
-    // memory_test();
-    //pat_acc_mem_test();
+    // load image into desired memory space. In the future, this will come from the host io interface
+    load_img(0);
+
+    // reset cop and start inference
+    cop_reset();
+    cop_run();
+
     return 0;
 }
