@@ -9,6 +9,7 @@ cp hardware_src/CnnAccelerator.scala $PATMOSPATH/hardware/src/main/scala/cop/
 # copy test scripts
 cp -r hardware_test/accelerator $PATMOSPATH/c/
 cp hardware_test/test.c $PATMOSPATH/c/
+cp hardware_test/counter.h $PATMOSPATH/c/
 
 # copy config
 cp hardware_config/altde2-115.xml $PATMOSPATH/hardware/config/

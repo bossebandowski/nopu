@@ -29,7 +29,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val FUNC_GET_RES          = "b00100".U(5.W)   // TEST: read a result
 
     // states COP
-    val idle :: start :: restart :: running :: mem_w :: mem_r :: load_px :: load_w :: load_b :: load_n :: calc_n :: write_n :: Nil = Enum(UInt(), 12)
+    val idle :: start :: restart :: running :: mem_w :: mem_r :: load_px :: load_w :: load_b :: load_n :: calc_n :: write_n :: b_add_0 :: b_wr_0 :: Nil = Enum(UInt(), 14)
     val stateReg = Reg(init = idle)
 
     // state MEM
@@ -42,6 +42,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val mem_w_buffer = Reg(Vec(BURST_LENGTH, UInt(DATA_WIDTH.W)))
     val mem_r_buffer = Reg(Vec(BURST_LENGTH, UInt(DATA_WIDTH.W)))
     val burst_count_reg = RegInit(0.U(3.W))
+    val relu = Reg(Vec(BURST_LENGTH, SInt(DATA_WIDTH.W)))
+
 
     val readAddrP = RegInit(0.U(DATA_WIDTH.W))
     val readAddrW = RegInit(0.U(DATA_WIDTH.W))
@@ -51,22 +53,18 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val nodeIdx = RegInit(0.U(DATA_WIDTH.W))
     val outputIdx = RegInit(0.U(DATA_WIDTH.W))
 
-    val ws = Reg(Vec(BURST_LENGTH, 8.U))
-    val pxs = Reg(Vec(BURST_LENGTH, 8.U))
-    val ns = Reg(Vec(BURST_LENGTH, 32.U))
+    val ws = Reg(Vec(BURST_LENGTH, SInt(8.W)))
+    val pxs = Reg(Vec(BURST_LENGTH, SInt(8.W)))
+    val ns = Reg(Vec(BURST_LENGTH, SInt(32.W)))
+    val bs = Reg(Vec(BURST_LENGTH, SInt(32.W)))
 
-    val n_count_reg = RegInit(0.U(3.W))
-    val iterations = RegInit(0.U(DATA_WIDTH.W))
+    val pxCount = RegInit(0.U(32.W))
+    val nCount = RegInit(0.U(32.W))
 
-/* ============================================= OLD CONSTANTS ============================================= */ 
+    val loop_weights :: add_biases :: layer_2 :: Nil = Enum(UInt(), 3)
+    val progress = Reg(init = loop_weights)
 
-    val layer2 = Reg(Vec(10, SInt(32.W)))
-
-    val pReg = Reg(init = SInt(0, 32))
-    val wReg = Reg(init = SInt(0, 32))
-    val bReg = Reg(init = SInt(0, 32))
-    val outputReg = Reg(init = UInt(10, 32))
-    val nReg = Reg(init = SInt(0, 32))
+/* ================================================= CONSTANTS ============================================= */ 
 
     // address constants
     val img_addr_0 = 30.U
@@ -125,6 +123,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                         stateReg := mem_r
                     }
                 }
+                
             }
         }
     }
@@ -134,7 +133,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     switch(stateReg) {
         is(idle) {
             /*
-            Don't do anything, really...
+            Don't do anything until asked to
             */
             io.copOut.ena_out := Bool(true)
         }
@@ -146,15 +145,18 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             readAddrP := img_addr_0                     // reset pixel addresss
             readAddrW := w_1_addr_0                     // reset weight address
             readAddrB := b_1_addr_0                     // reset bias address
-            iterations := 0.U                           // reset iteration count
+            readAddrN := n_addr_0                       // reset node address
+            nCount := 0.U                               // reset node count
+            pxCount := 0.U                              // reset pixel count
+            progress := loop_weights                    // reset flag that tells load_n state where to go next
 
             stateReg := load_px                         // transition to load pixel state
+
             io.copOut.ena_out := Bool(true)
         }
         is(load_px) {
             /*
-            Read one burst of pixels (this will be 16 in total because each pixel is 1 byte and a single
-            burst returns 4 words, so 4 x 4 = 16).
+            Read one burst of pixels and only keep the first one (for now)
             */
 
 
@@ -162,18 +164,17 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
             when (memState === memIdle) {    
                 addrReg := readAddrP                        // load current pixel base address into address reg
-                readAddrP := readAddrP + 4.U               // increment readAddrP by 16 (burst length x (px / word))
-                memState := memReadReq                  // force memory into read request state when idle
+                memState := memReadReq                      // force memory into read request state when idle
             }
 
-            when (memState === memDone) {               // when done reading the burst, transition to load weights
+            when (memState === memDone) {                   // when done reading the burst, transition to load weights
                 memState := memIdle
                 stateReg := load_w
 
-                pxs(0) := mem_r_buffer(0)(31,24)
-                pxs(1) := mem_r_buffer(0)(23,16)
-                pxs(2) := mem_r_buffer(0)(15,8)
-                pxs(3) := mem_r_buffer(0)(7,0)
+                pxs(0) := mem_r_buffer(0)(31,24).asSInt
+                // pxs(1) := mem_r_buffer(0)(23,16)
+                // pxs(2) := mem_r_buffer(0)(15,8)
+                // pxs(3) := mem_r_buffer(0)(7,0)
             }
         }
         is(load_w) {
@@ -184,98 +185,185 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
             when (memState === memIdle) {    
                 addrReg := readAddrW                        // load current weight base address into address reg
-                readAddrW := readAddrW + 4.U               // increment readAddrW by 16 (burst length x (weights / word))
-
-                memState := memReadReq                  // force memory into read request state when idle
+                memState := memReadReq                      // force memory into read request state when idle
             }
 
-            when (memState === memDone) {               // when done reading the burst, transition to mac
+            when (memState === memDone) {                   // when done reading the burst, transition to load nodes
                 memState := memIdle
                 stateReg := load_n
-                n_count_reg := 0.U
 
-                ws(0) := mem_r_buffer(0)(31,24)
-                ws(1) := mem_r_buffer(0)(23,16)
-                ws(2) := mem_r_buffer(0)(15,8)
-                ws(3) := mem_r_buffer(0)(7,0)
+                ws(0) := mem_r_buffer(0)(31,24).asSInt
+                ws(1) := mem_r_buffer(0)(23,16).asSInt
+                ws(2) := mem_r_buffer(0)(15,8).asSInt
+                ws(3) := mem_r_buffer(0)(7,0).asSInt
             }
         }
         is(load_n) {
             /*
             Load intermediate network nodes. Since the activations are 32 bits, a single burst only returns
-            4 intermediate network nodes. Therefore, we need to perform 4 bursts to retrieve 16 nodes. 
+            4 intermediate network nodes. 
             */
 
             io.copOut.ena_out := Bool(true)
 
             when (memState === memIdle) {    
-
-                n_count_reg := n_count_reg + 1.U            // keep track of loop count
                 addrReg := readAddrN                        // load current node base address into address reg
-
-                memState := memReadReq                  // force memory into read request state when idle
+                memState := memReadReq                      // force memory into read request state when idle
             }
 
-            when (memState === memDone) {               // when done reading the burst, transition to mac
+            when (memState === memDone) {                   // when done reading the burst, transition to mac
                 memState := memIdle
-                stateReg := calc_n
+                switch(progress) {
+                    is(loop_weights) {
+                        stateReg := calc_n
+                    }
+                    is(add_biases) {
+                        stateReg := b_add_0
+                    }
+                    is(layer_2) {
+                        stateReg := idle
+                    }
+                }
 
-                ns(0) := mem_r_buffer(0)
-                ns(1) := mem_r_buffer(1)
-                ns(2) := mem_r_buffer(2)
-                ns(3) := mem_r_buffer(3)
+                ns(0) := mem_r_buffer(0).asSInt
+                ns(1) := mem_r_buffer(1).asSInt
+                ns(2) := mem_r_buffer(2).asSInt
+                ns(3) := mem_r_buffer(3).asSInt
             }      
         }
-
         is(calc_n) {
-            ns(0) := ns(0) + Cat(0.U((DATA_WIDTH - 8).W), pxs(0) * ws(0))
-            ns(1) := ns(0) + Cat(0.U((DATA_WIDTH - 8).W), pxs(1) * ws(1))
-            ns(2) := ns(0) + Cat(0.U((DATA_WIDTH - 8).W), pxs(2) * ws(2))
-            ns(3) := ns(0) + Cat(0.U((DATA_WIDTH - 8).W), pxs(3) * ws(3))
+            /*
+            Do the mac operations (4 at a time, this is limited by the number of nodes we can read per burst)
+            */
+
+            io.copOut.ena_out := Bool(true)
+
+            ns(0) := ns(0) + pxs(0) * ws(0)
+            ns(1) := ns(1) + pxs(0) * ws(1)
+            ns(2) := ns(2) + pxs(0) * ws(2)
+            ns(3) := ns(3) + pxs(0) * ws(3)
 
             stateReg := write_n
         }
-
         is(write_n) {
+            /*
+            write result back to memory (this could potentially be moved to on-chip memory).
+            Further, defines how to continue based on which pixel and nodes have just been processed
+            */
+            io.copOut.ena_out := Bool(true)
 
             when (memState === memIdle) {    
-                mem_w_buffer(0) := ns(0)
-                mem_w_buffer(0) := ns(1)
-                mem_w_buffer(0) := ns(2)
-                mem_w_buffer(0) := ns(3)
+                mem_w_buffer(0) := ns(0).asUInt
+                mem_w_buffer(1) := ns(1).asUInt
+                mem_w_buffer(2) := ns(2).asUInt
+                mem_w_buffer(3) := ns(3).asUInt
 
                 addrReg := readAddrN                        // make sure that the right node base address is still in addrReg
-                readAddrN := readAddrW + 4.U                // increment readAddrN by 4 (burst length)
-                memState := memWriteReq                 // force memory into write request state when idle
+                memState := memWriteReq                     // force memory into write request state when idle
             }
 
-            when (memState === memDone) {               // when done reading the burst, transition to mac
+            when (memState === memDone) {                   // when done reading the burst, transition to mac
                 memState := memIdle
 
-                ns(0) := mem_r_buffer(0)
-                ns(1) := mem_r_buffer(1)
-                ns(2) := mem_r_buffer(2)
-                ns(3) := mem_r_buffer(3)
-
                 // transitions
-                when (n_count_reg < 4.U) {
-                    stateReg := load_n
+
+                // when pxCount == 784 && nCount == 100, we are done and continue with biases
+                when (pxCount === 784.U && nCount === 100.U) {
+                    nCount := 0.U                           // reset node count            
+                    readAddrN := n_addr_0                   // reset node address
+                    stateReg := load_b                      // get ready to add biases
                 }
-                .elsewhen (iterations < 19600.U) {
-                    // reset pixel addr if necessary!!! ===================================================================================
-                    // reset pixel addr if necessary!!! ===================================================================================
-                    // reset pixel addr if necessary!!! ===================================================================================
-                    // reset pixel addr if necessary!!! ===================================================================================
-
-
-
-                    iterations := iterations + 1.U
-                    stateReg := load_px
+                // when pxCount < 784 && nCount = 100 it needs to be reset to 0 and the next pixel will be used as input
+                .elsewhen(pxCount < 784.U && nCount === 100.U) {
+                    nCount := 0.U                           // reset node count            
+                    readAddrN := n_addr_0                   // reset node address
+                    pxCount := pxCount + 1.U                // increment pixel count
+                    readAddrP := readAddrP + 1.U            // increment pixel address
+                    readAddrW := readAddrW + 1.U            // increment weight address
+                    stateReg := load_px                     // transition to load pixel state
                 }
+                // when pxCount < 784 && nCount < 100, we just look and the next 4 weights to the next four nodes
                 .otherwise {
-                    stateReg := load_b
+                    nCount := nCount + 4.U                  // increment node count by 4
+                    readAddrN := readAddrN + 4.U            // increment node address by 4
+                    readAddrW := readAddrW + 1.U            // increment weight address by 1
+                    stateReg := load_w                      // transition to load weight (same pixel, different nodes, different weights)
                 }
-            }   
+            }
+        }
+        is(load_b) {
+            /*
+            load bias from memory and add to nodes. Biases are 32 bit wide, so we can read four at a time
+            */
+            progress := add_biases
+            io.copOut.ena_out := Bool(true)
+
+            when (memState === memIdle) {    
+                addrReg := readAddrB                        // load current bias base address into address reg
+                memState := memReadReq                      // force memory into read request state when idle
+            }
+
+            when (memState === memDone) {                   // when done reading the burst, transition to loading nodes
+                memState := memIdle
+                stateReg := load_n
+
+                bs(0) := mem_r_buffer(0).asSInt
+                bs(1) := mem_r_buffer(1).asSInt
+                bs(2) := mem_r_buffer(2).asSInt
+                bs(3) := mem_r_buffer(3).asSInt
+            }
+        }
+        is(b_add_0) {
+            /*
+            add biases to nodes and apply relu
+            */
+            relu(0) := bs(0) + ns(0)
+            relu(1) := bs(1) + ns(1)
+            relu(2) := bs(2) + ns(2)
+            relu(3) := bs(3) + ns(3)
+
+            when (relu(0) < 0.S) {
+                relu(0) := 0.S
+            }
+            when (relu(1) < 0.S) {
+                relu(1) := 0.S
+            }
+            when (relu(2) < 0.S) {
+                relu(2) := 0.S
+            }
+            when (relu(3) < 0.S) {
+                relu(3) := 0.S
+            }
+
+            stateReg := b_wr_0
+
+        }
+        is(b_wr_0){
+            io.copOut.ena_out := Bool(true)
+
+            when (memState === memIdle) {    
+                mem_w_buffer(0) := relu(0).asUInt
+                mem_w_buffer(1) := relu(1).asUInt
+                mem_w_buffer(2) := relu(2).asUInt
+                mem_w_buffer(3) := relu(3).asUInt
+
+                addrReg := readAddrN
+                memState := memWriteReq
+            }
+
+            when (memState === memDone) {
+                memState := memIdle
+            
+                when(nCount === 100.U) {
+                    stateReg := idle
+                }
+                .otherwise{
+                    nCount := nCount + 4.U                          // increment node count by 4
+                    readAddrN := readAddrN + 4.U                    // increment node address by 4
+                    readAddrB := readAddrB + 4.U                    // increment bias address by 4
+                    stateReg := load_b                              // continue with loading the next 4 biases
+                }
+            }
         }
     }
 

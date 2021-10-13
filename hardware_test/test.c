@@ -5,14 +5,13 @@
 #include <string.h>
 #include <stdio.h>
 #include "accelerator/parameters.h"
+#include "counter.h"
 
-// reset coprocessor seed
 void cop_reset()
 {
     asm(".word 0x3400001"); // unpredicated COP_WRITE to COP0 with FUNC = 00000, RA = 00000, RB = 00000
 }
 
-// waits until the current computation is completed
 void cop_busy_wait()
 {
     register uint32_t state __asm__("18") = 1;
@@ -204,7 +203,10 @@ int main(int argc, char **argv)
 
     // reset cop and start inference
     cop_reset();
+    cntReset();
     cop_run();
-
+    int res = cop_get_res();
+    int hwExecTime = cntRead();
+    printf("=================\nresult: %d\ncycles: %d\n=================\n", res, hwExecTime);
     return 0;
 }
