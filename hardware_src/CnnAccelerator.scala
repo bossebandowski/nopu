@@ -338,7 +338,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             stateReg := b_wr_0
 
         }
-        is(b_wr_0){
+        is(b_wr_0) {
             io.copOut.ena_out := Bool(true)
 
             when (memState === memIdle) {    
@@ -365,44 +365,40 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 }
             }
         }
-    }
+        is(mem_w) {
+            when (memState === memIdle) {
+                memState := memWriteReq
+            }
 
-    when (stateReg === mem_w) {
-        when (memState === memIdle) {
-            memState := memWriteReq
+            when (memState === memDone) {
+                memState := memIdle
+                stateReg := idle
+            }
         }
+        is(mem_r) {
+            when (memState === memIdle) {
+                memState := memReadReq
+            }
 
-        when (memState === memDone) {
+            when (memState === memDone) {
+                memState := memIdle
+                stateReg := idle
+                resReg := mem_r_buffer(0)
+            }
+        }
+        is(restart) {
+            burst_count_reg := 0.U
+            mem_r_buffer := Vec(Seq(0.U, 0.U, 0.U, 0.U))
+            mem_w_buffer := Vec(Seq(0.U, 0.U, 0.U, 0.U))
+            addrReg := 0.U
+
+            io.copOut.result := 0.U
+            io.copOut.ena_out := Bool(false)
+            resReg := 10.U
+
             memState := memIdle
             stateReg := idle
         }
-    }
-
-    when (stateReg === mem_r) {
-        when (memState === memIdle) {
-            memState := memReadReq
-        }
-
-        when (memState === memDone) {
-            memState := memIdle
-            stateReg := idle
-            resReg := mem_r_buffer(0)
-        }
-    }
-
-    when (stateReg === restart) {
-
-        burst_count_reg := 0.U
-        mem_r_buffer := Vec(Seq(0.U, 0.U, 0.U, 0.U))
-        mem_w_buffer := Vec(Seq(0.U, 0.U, 0.U, 0.U))
-        addrReg := 0.U
-
-        io.copOut.result := 0.U
-        io.copOut.ena_out := Bool(false)
-        resReg := 10.U
-
-        memState := memIdle
-        stateReg := idle
     }
 
 
@@ -440,7 +436,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             io.memPort.M.Data := mem_w_buffer(0)
             io.memPort.M.DataValid := 1.U
             when(io.memPort.S.CmdAccept === 1.U && io.memPort.S.DataAccept === 1.U) {
-                burst_count_reg := burst_count_reg + 1.U
+                burst_count_reg := 1.U
                 memState := memWrite
             }
         }

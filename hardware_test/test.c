@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "accelerator/parameters.h"
-#include "counter.h"
+#include <counter.h>
 
 void cop_reset()
 {
@@ -152,13 +152,14 @@ void memory_test()
     cop_mem_w(800, 0x11223344);
     dumpit();
 
+    printf("==\n");
+
+    cop_mem_w(804, 0x11223344);
     cop_mem_w(804, 0x55667788);
-    dumpit();
+    cop_mem_w(804, 0x9900aabb);
+    cop_mem_w(804, 0xccddeeff);
+    cop_mem_w(804, 0x11223344);
 
-    cop_mem_w(808, 0x99aabbcc);
-    dumpit();
-
-    cop_mem_w(812, 0xddeeff00);
     dumpit();
 }
 
@@ -207,6 +208,10 @@ int main(int argc, char **argv)
     cop_run();
     int res = cop_get_res();
     int hwExecTime = cntRead();
-    printf("=================\nresult: %d\ncycles: %d\n=================\n", res, hwExecTime);
+    printf("=================\n"
+           "result: %d\n"
+           "cycles: %d\n"
+           "=================\n",
+           res, hwExecTime);
     return 0;
 }
