@@ -32,7 +32,7 @@ void cop_run()
     cop_busy_wait();
 }
 
-int cop_get_res()
+int32_t cop_get_res()
 {
     register uint32_t result __asm__("19") = 11;
     asm(".word 0x3660203"
@@ -116,7 +116,27 @@ void print_default_locations()
 void load_img()
 {
     int *img = (int *)30;
-    memcpy(img, img_0, sizeof(img_0));
+    memcpy(img, img_5, sizeof(img_5));
+}
+
+void read_inputs()
+{
+    cop_mem_r(1000000);
+    printf("weight 0[0]:\t%ld\n", cop_get_res());
+    cop_mem_r(1000000 + 4 * 78399);
+    printf("weight 0[78399]:\t%ld\n", cop_get_res());
+    cop_mem_r(1320000);
+    printf("weight 1[0]:\t%ld\n", cop_get_res());
+    cop_mem_r(1320000 + 4 * 1);
+    printf("weight 1[1]:\t%ld\n", cop_get_res());
+    cop_mem_r(1320000 + 4 * 999);
+    printf("weight 1[999]:\t%ld\n", cop_get_res());
+    cop_mem_r(1325000);
+    printf("bias 0[0]:\t%ld\n", cop_get_res());
+    cop_mem_r(1326000);
+    printf("bias 1[0]:\t%ld\n", cop_get_res());
+    cop_mem_r(30);
+    printf("img [0]:\t%ld\n", cop_get_res());
 }
 
 void read_raw_outputs()
@@ -124,7 +144,7 @@ void read_raw_outputs()
     for (int i = 0; i < 10; i++)
     {
         cop_mem_r(20000 + i * 4);
-        printf("%d: %x\n", i, cop_get_res());
+        printf("%d: %lx\n", i, cop_get_res());
     }
 }
 
@@ -133,7 +153,7 @@ void print_intermediate_layer_head()
     for (int i = 0; i < 20; i++)
     {
         cop_mem_r(10000 + i * 4);
-        printf("%d: %x\n", i, cop_get_res());
+        printf("%d: %lx\n", i, cop_get_res());
     }
 }
 

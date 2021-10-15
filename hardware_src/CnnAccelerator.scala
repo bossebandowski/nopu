@@ -58,7 +58,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val layer = RegInit(0.U(1.W))
     
 
-    val ws = Reg(Vec(BURST_LENGTH, SInt(32.W)))         // WCH!
+    val ws = Reg(Vec(BURST_LENGTH, SInt(32.W)))
     val ins32 = Reg(Vec(BURST_LENGTH, SInt(32.W)))
     val outs = Reg(Vec(BURST_LENGTH, SInt(32.W)))
     val bs = Reg(Vec(BURST_LENGTH, SInt(32.W)))
@@ -70,7 +70,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
 /* ================================================= CONSTANTS ============================================= */ 
 
-    // address constants        // WCH!
+    // address constants
     val img_addr_0 = 30.U
     val w_1_addr_0 = 1000000.U
     val w_2_addr_0 = 1320000.U
@@ -196,7 +196,6 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 memState := memIdle                         // mark memory as idle
                 stateReg := load_output                     // load outputs next
 
-                // WCH!
                 ws(0) := mem_r_buffer(0).asSInt             // load 4 weights from read buffer
                 ws(1) := mem_r_buffer(1).asSInt
                 ws(2) := mem_r_buffer(2).asSInt
@@ -279,15 +278,20 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                     outCount := 0.U                         // reset output count
                     inCount := inCount + 1.U                // increment input count
                     inAddr := inAddr + 4.U                  // increment input address by one word
-                    weightAddr := weightAddr + 16.U         // increment weight address by four words
                     
                     when (layer === 0.U) {                  // reset node address based on current layer         
                         outAddr := n_addr_0         
                         stateReg := load_input_32           // in the future, the input layer will map to a different loop because the inputs are less wide
+                        weightAddr := weightAddr + 16.U     // increment weight address by four words
+
                     }
                     .otherwise {
                         outAddr := n_addr_1
                         stateReg := load_input_32
+                        weightAddr := weightAddr + 8.U      // when in the second layer, only increment the weight address by two words because the number 
+                                                            // of output nodes is not divisible by the burst length. Therefore, the results of the
+                                                            // calculations with two of the last four weights do not matter. The last two weights are actually
+                                                            // map from the next input to the first two outputs.
                     }
                 }
                 .otherwise {
