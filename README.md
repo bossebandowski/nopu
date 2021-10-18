@@ -49,7 +49,7 @@ gross execution time per inference (including img load): 1835338
 - **Accuracy**
 Not measured
 
-- **Synthesis Report**
+## Synthesis Report
 Flow Status	Successful - Mon Oct 18 11:26:08 2021
 
 Quartus Prime Version	19.1.0 Build 670 09/22/2019 Patches 0.02i SJ Lite Edition
