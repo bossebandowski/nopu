@@ -24,12 +24,13 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val FUNC_RESET            = "b00000".U(5.W)   // reset coprocessor
     val FUNC_POLL             = "b00001".U(5.W)   // get processor status
     val FUNC_RUN              = "b00010".U(5.W)   // init inference
+    val FUNC_GET_RES          = "b00100".U(5.W)   // read result register
+
     val FUNC_MEM_W            = "b00011".U(5.W)   // TEST: write a value into memory
     val FUNC_MEM_R            = "b00101".U(5.W)   // TEST: read a value from memory
-    val FUNC_GET_RES          = "b00100".U(5.W)   // TEST: read a result
 
     // states COP
-    val idle :: start :: load_input_32 :: load_w_32 :: load_output :: mac_32 :: write_out :: load_b :: b_add_relu_0 :: b_add_relu_1 :: b_add :: b_wr :: read_output :: find_max_aux :: save_max :: mem_w :: mem_r :: restart :: Nil = Enum(18)
+    val idle :: start :: load_input_32 :: load_w_32 :: load_output :: mac_32 :: write_out :: load_b :: b_add_relu_0 :: b_add_relu_1 :: b_add :: b_wr :: read_output :: find_max_aux :: save_max :: mem_w :: mem_r :: restart :: reset_memory :: Nil = Enum(19)
 
     val stateReg = RegInit(0.U(8.W))
     val outputUsage = RegInit(0.U(8.W))
@@ -467,7 +468,53 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             copy index of maximum output into result register and set cop to idle (process finished)
             */
             resReg := idx
-            stateReg := idle
+            stateReg := reset_memory
+            maxIn := 100.U
+            maxOut := 10.U
+            inCount := 0.U
+            outCount := 0.U
+            inAddr := n_addr_0
+            outAddr := n_addr_1
+            layer := 0.U
+
+            mem_w_buffer(0) := 0.U           // setup to write 0s
+            mem_w_buffer(1) := 0.U
+            mem_w_buffer(2) := 0.U
+            mem_w_buffer(3) := 0.U
+
+        }
+        is(reset_memory) {
+            /*
+            reset network nodes to 0 to be ready for next inference
+            */
+            when (memState === memIdle) {                   // wait until memory is ready
+                when (layer === 0.U) {
+                    when (inCount >= maxIn) {
+                        layer := 1.U
+                    }
+                    .otherwise {
+                        inCount := inCount + 4.U
+                        inAddr := inAddr + 16.U
+                        addrReg := inAddr
+                        memState := memWriteReq
+                    }
+                }
+                .elsewhen (layer === 1.U) {
+                    when (outCount >= maxOut) {
+                        stateReg := idle
+                    }
+                    .otherwise {
+                        outCount := outCount + 4.U
+                        outAddr := outAddr + 16.U
+                        addrReg := outAddr
+                        memState := memWriteReq
+                    }
+                }
+            }
+
+            when (memState === memDone) {                   // wait until transition is finished
+                memState := memIdle                         // mark memory as idle
+            }
         }
         
         is(mem_w) {
@@ -497,10 +544,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
             resReg := 10.U
 
-            // also need to reset intermediate results in memory!
-
             memState := memIdle
-            stateReg := idle
+            stateReg := reset_memory
         }
     }
 
