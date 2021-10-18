@@ -30,7 +30,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val FUNC_MEM_R            = "b00101".U(5.W)   // TEST: read a value from memory
 
     // states COP
-    val idle :: start :: load_input_32 :: load_w_32 :: load_output :: mac_32 :: write_out :: load_b :: b_add_relu_0 :: b_add_relu_1 :: b_add :: b_wr :: read_output :: find_max_aux :: save_max :: mem_w :: mem_r :: restart :: reset_memory :: Nil = Enum(19)
+    val idle :: start :: load_input_32 :: load_w_8 :: load_output :: mac_32 :: write_out :: load_b :: b_add_relu_0 :: b_add_relu_1 :: b_add :: b_wr :: read_output :: find_max_aux :: save_max :: mem_w :: mem_r :: restart :: reset_memory :: Nil = Enum(19)
 
     val stateReg = RegInit(0.U(8.W))
     val outputUsage = RegInit(0.U(8.W))
@@ -59,7 +59,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val layer = RegInit(0.U(1.W))
     
 
-    val ws = Reg(Vec(BURST_LENGTH, SInt(32.W)))
+    val ws = Reg(Vec(BURST_LENGTH, SInt(8.W)))
     val ins32 = Reg(Vec(BURST_LENGTH, SInt(32.W)))
     val outs = Reg(Vec(BURST_LENGTH, SInt(32.W)))
     val bs = Reg(Vec(BURST_LENGTH, SInt(32.W)))
@@ -178,12 +178,12 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
             when (memState === memDone) {                   // wait until transaction is finished
                 memState := memIdle                         // mark memory as idle
-                stateReg := load_w_32                       // load weights next
+                stateReg := load_w_8                        // load weights next
 
                 ins32(0) := mem_r_buffer(0).asSInt          // load first input from read buffer (and discard the rest for now)
             }
         }
-        is(load_w_32) {
+        is(load_w_8) {
             /*
             Read one burst of weights of 4 words. If weights are stored as full words, then this will amount to 4 weights
             */
@@ -197,10 +197,10 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 memState := memIdle                         // mark memory as idle
                 stateReg := load_output                     // load outputs next
 
-                ws(0) := mem_r_buffer(0).asSInt             // load 4 weights from read buffer
-                ws(1) := mem_r_buffer(1).asSInt
-                ws(2) := mem_r_buffer(2).asSInt
-                ws(3) := mem_r_buffer(3).asSInt
+                ws(3) := mem_r_buffer(0)(7, 0).asSInt       
+                ws(2) := mem_r_buffer(0)(15, 8).asSInt
+                ws(1) := mem_r_buffer(0)(23, 16).asSInt
+                ws(0) := mem_r_buffer(0)(31, 24).asSInt         
             }
         }
         is(load_output) {
@@ -283,16 +283,17 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                     when (layer === 0.U) {                  // reset node address based on current layer         
                         outAddr := n_addr_0         
                         stateReg := load_input_32           // in the future, the input layer will map to a different loop because the inputs are less wide
-                        weightAddr := weightAddr + 16.U     // increment weight address by four words
+                        weightAddr := weightAddr + 4.U      // increment weight address by four bytes
 
                     }
                     .otherwise {
                         outAddr := n_addr_1
                         stateReg := load_input_32
-                        weightAddr := weightAddr + 8.U      // when in the second layer, only increment the weight address by two words because the number 
+                        weightAddr := weightAddr + 4.U      // when in the second layer, only increment the weight address by two bytes because the number 
                                                             // of output nodes is not divisible by the burst length. Therefore, the results of the
                                                             // calculations with two of the last four weights do not matter. The last two weights are actually
                                                             // map from the next input to the first two outputs.
+                                                            // with 8 bit weights, updating the address needs to be delayed
                     }
                 }
                 .otherwise {
@@ -301,8 +302,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                     */
                     outCount := outCount + 4.U              // increment node count by 4
                     outAddr := outAddr + 16.U               // increment node address by 4 words
-                    weightAddr := weightAddr + 16.U         // increment weight address by 4 words
-                    stateReg := load_w_32                   // transition to load weight (same input, different outputs, different weights)
+                    weightAddr := weightAddr + 4.U          // increment weight address by 4 bytes
+                    stateReg := load_w_8                    // transition to load weight (same input, different outputs, different weights)
                 }
             }
         }

@@ -4,89 +4,11 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
-#include "accelerator/parameters.h"
+
 #include <counter.h>
-
-
-
-void cop_busy_wait()
-{
-    register uint32_t state __asm__("18") = 1;
-    while (state)
-    {
-        //printf("state: %lu\n", state);
-        asm(".word 0x3640083" // unpredicated COP_READ to COP0 with FUNC = 00001, RA = 00000, RD = 10010
-            : "=r"(state)
-            :
-            : "18");
-    }
-    //printf("state: %lu\n", state);
-}
-
-void cop_reset()
-{
-    asm(".word 0x3400001"); // unpredicated COP_WRITE to COP0 with FUNC = 00000, RA = 00000, RB = 00000
-    cop_busy_wait();
-
-}
-
-void cop_run()
-{
-    asm(".word 0x3440001"); // unpredicated COP_WRITE to COP0 with FUNC = 00010, RA = 00000, RB = 00000
-    cop_busy_wait();
-}
-
-int32_t cop_get_res()
-{
-    register uint32_t result __asm__("19") = 11;
-    asm(".word 0x3660203"
-        : "=r"(result)
-        :
-        : "19");
-
-    // pref     01101
-    // regD     10011
-    // regA     00000
-    // func     00100
-    // post     0000011
-
-    return result;
-}
-
-void cop_mem_w(int addr, int val)
-{
-    register uint32_t addrReg __asm__("16") = addr;
-    register uint32_t valReg __asm__("17") = val;
-
-    asm(".word 0x3470881"
-        :
-        : "r"(addrReg), "r"(valReg));
-
-    // pref     01101
-    // func     00011
-    // regA     10000
-    // regB     10001
-    // post     0000001
-
-    cop_busy_wait();
-}
-
-void cop_mem_r(int addr)
-{
-    register uint32_t addrReg __asm__("16") = addr;
-
-    asm(".word 0x34B0001"
-        :
-        : "r"(addrReg));
-
-    // pref     01101
-    // func     00101
-    // regA     10000
-    // regB     00000
-    // post     0000001
-
-    cop_busy_wait();
-}
+#include <cop.h>
+#include <parameters.h>
+#include <images.h>
 
 void load_nn()
 {
@@ -110,8 +32,8 @@ void print_default_locations()
     int b1p = (int)&biases_1[0];
     int b2p = (int)&biases_2[0];
     int imgp = (int)&img_0[0];
-    printf("the first weight of the 1st layer %ld is stored at address %u\n", weights_1[0], w1p);
-    printf("the first weight of the 2nd layer %ld is stored at address %u\n", weights_2[0], w2p);
+    printf("the first weight of the 1st layer %hhd is stored at address %u\n", weights_1[0], w1p);
+    printf("the first weight of the 2nd layer %hhd is stored at address %u\n", weights_2[0], w2p);
     printf("the first bias of the 1st layer %ld is stored at address %u\n", biases_1[0], b1p);
     printf("the first bias of the 2nd layer %ld is stored at address %u\n", biases_2[0], b2p);
     printf("the first pixel of the first image %ld is stored at address %u\n", img_0[0], imgp);
@@ -126,21 +48,28 @@ void load_img(const int32_t img[], int size)
 void read_inputs()
 {
     cop_mem_r(1000000);
-    printf("weight 0[0]:\t%ld\n", cop_get_res());
-    cop_mem_r(1000000 + 4 * 78399);
-    printf("weight 0[78399]:\t%ld\n", cop_get_res());
+    printf("weight 0[0]:\t\t%lx\n", cop_get_res());
+    cop_mem_r(1000000 + 78399);
+    printf("weight 0[78399]:\t%lx\n", cop_get_res());
     cop_mem_r(1320000);
-    printf("weight 1[0]:\t%ld\n", cop_get_res());
-    cop_mem_r(1320000 + 4 * 1);
-    printf("weight 1[1]:\t%ld\n", cop_get_res());
-    cop_mem_r(1320000 + 4 * 999);
-    printf("weight 1[999]:\t%ld\n", cop_get_res());
+    printf("weight 1[0]:\t\t%lx\n", cop_get_res());
+    cop_mem_r(1320000 + 4);
+    printf("weight 1[1]:\t\t%lx\n", cop_get_res());
+    cop_mem_r(1320000 + 999);
+    printf("weight 1[999]:\t\t%lx\n", cop_get_res());
     cop_mem_r(1325000);
-    printf("bias 0[0]:\t%ld\n", cop_get_res());
+    printf("bias 0[0]:\t\t%lx\n", cop_get_res());
     cop_mem_r(1326000);
-    printf("bias 1[0]:\t%ld\n", cop_get_res());
+    printf("bias 1[0]:\t\t%lx\n", cop_get_res());
     cop_mem_r(30);
-    printf("img [0]:\t%ld\n", cop_get_res());
+    printf("img [0]:\t\t%lx\n", cop_get_res());
+}
+
+void read_weights() {
+    for (int i = 1000000; i < 1000020; i++) {
+        cop_mem_r(i);
+        printf("%d:\t\t%lx\n", i, cop_get_res());
+    }
 }
 
 void read_raw_outputs()
@@ -176,16 +105,14 @@ int main(int argc, char **argv)
     int hwExecTime;
     int size = 784*4;
 
-    // run a few inferences
-    printf("inference result img_4: %d\n", run_inf(img_4, size));
-    printf("inference result img_0: %d\n", run_inf(img_0, size));
-    printf("inference result img_3: %d\n", run_inf(img_3, size));
-    printf("inference result img_5: %d\n", run_inf(img_5, size));
-
     // reset the count
     cntReset();
-    run_inf(img_0, size);
+
+    // run single inference
+    res = run_inf(img_5, size);
     hwExecTime = cntRead();
+
+    printf("inference result img_5: %d\n", res);
 
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
     return 0;
