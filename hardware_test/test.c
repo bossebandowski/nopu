@@ -7,10 +7,7 @@
 #include "accelerator/parameters.h"
 #include <counter.h>
 
-void cop_reset()
-{
-    asm(".word 0x3400001"); // unpredicated COP_WRITE to COP0 with FUNC = 00000, RA = 00000, RB = 00000
-}
+
 
 void cop_busy_wait()
 {
@@ -24,6 +21,13 @@ void cop_busy_wait()
             : "18");
     }
     //printf("state: %lu\n", state);
+}
+
+void cop_reset()
+{
+    asm(".word 0x3400001"); // unpredicated COP_WRITE to COP0 with FUNC = 00000, RA = 00000, RB = 00000
+    cop_busy_wait();
+
 }
 
 void cop_run()
@@ -113,10 +117,10 @@ void print_default_locations()
     printf("the first pixel of the first image %ld is stored at address %u\n", img_0[0], imgp);
 }
 
-void load_img()
+void load_img(const int32_t img[], int size)
 {
-    int *img = (int *)30;
-    memcpy(img, img_5, sizeof(img_5));
+    int *im_addr_0 = (int *)30;
+    memcpy(im_addr_0, img, size);
 }
 
 void read_inputs()
@@ -157,29 +161,32 @@ void print_intermediate_layer_head()
     }
 }
 
+int run_inf(const int32_t img[], int size) {
+    load_img(img, size);
+    cop_run();
+    return cop_get_res();
+}
+
 int main(int argc, char **argv)
 {
     // load nn parameters into desired memory space. In the future, this will be copying from flash to sram
     load_nn();
 
-    // load image into desired memory space. In the future, this will come from the host io interface
-    load_img();
+    int res;
+    int hwExecTime;
+    int size = 784*4;
 
-    // reset cop and start inference
-    cop_reset();
+    // run a few inferences
+    printf("inference result img_4: %d\n", run_inf(img_4, size));
+    printf("inference result img_0: %d\n", run_inf(img_0, size));
+    printf("inference result img_3: %d\n", run_inf(img_3, size));
+    printf("inference result img_5: %d\n", run_inf(img_5, size));
+
+    // reset the count
     cntReset();
+    run_inf(img_0, size);
+    hwExecTime = cntRead();
 
-    cop_run();
-    int res = cop_get_res();
-    int hwExecTime = cntRead();
-
-    printf("=================\n"
-           "result: %d\n"
-           "cycles: %d\n"
-           "=================\n",
-           res, hwExecTime);
-
-    read_raw_outputs();
-
+    printf("gross execution time per inference (including img load): %d\n", hwExecTime);
     return 0;
 }
