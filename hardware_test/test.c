@@ -1,5 +1,3 @@
-
-// #include <machine/patmos.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -19,24 +17,28 @@ void load_nn()
     int *b2p = (int *)1326000;
 
     // copy arrays to target memory space
-    memcpy(w1p, weights_1, sizeof(weights_1));
-    memcpy(w2p, weights_2, sizeof(weights_2));
-    memcpy(b1p, biases_1, sizeof(biases_1));
-    memcpy(b2p, biases_2, sizeof(biases_2));
+    memcpy(w1p, param_2_w_fc, sizeof(param_2_w_fc));
+    memcpy(w2p, param_4_w_fc, sizeof(param_4_w_fc));
+    memcpy(b1p, param_3_b, sizeof(param_3_b));
+    memcpy(b2p, param_5_b, sizeof(param_5_b));
 }
 
 void print_default_locations()
 {
-    int w1p = (int)&weights_1[0];
-    int w2p = (int)&weights_2[0];
-    int b1p = (int)&biases_1[0];
-    int b2p = (int)&biases_2[0];
-    int imgp = (int)&img_0[0];
-    printf("the first weight of the 1st layer %hhd is stored at address %u\n", weights_1[0], w1p);
-    printf("the first weight of the 2nd layer %hhd is stored at address %u\n", weights_2[0], w2p);
-    printf("the first bias of the 1st layer %ld is stored at address %u\n", biases_1[0], b1p);
-    printf("the first bias of the 2nd layer %ld is stored at address %u\n", biases_2[0], b2p);
-    printf("the first pixel of the first image %ld is stored at address %u\n", img_0[0], imgp);
+    int w1p = (int)&param_2_w_fc[0];
+    int w2p = (int)&param_4_w_fc[0];
+    int b1p = (int)&param_3_b[0];
+    int b2p = (int)&param_5_b[0];
+    int imgp0 = (int)&images[0][0];
+    int imgpn = (int)&images[9][783];
+
+    printf("the first weight of the 1st layer %ld is stored at address %u\n", param_2_w_fc[0], w1p);
+    printf("the first weight of the 2nd layer %ld is stored at address %u\n", param_4_w_fc[0], w2p);
+    printf("the first bias of the 1st layer %ld is stored at address %u\n", param_3_b[0], b1p);
+    printf("the first bias of the 2nd layer %ld is stored at address %u\n", param_5_b[0], b2p);
+    printf("the first pixel of the first image %ld is stored at address %u\n", images[0][0], imgp0);
+    printf("the last pixel of the last image %ld is stored at address %u\n", images[9][783], imgpn);
+
 }
 
 void load_img(const int32_t img[], int size)
@@ -104,16 +106,20 @@ int main(int argc, char **argv)
     int res;
     int hwExecTime;
     int size = 784*4;
+    for (int id = 0; id < 5; id++) {
 
-    // reset the count
-    cntReset();
+        // reset the count
+        cntReset();
 
-    // run single inference
-    res = run_inf(img_5, size);
-    hwExecTime = cntRead();
+        // run single inference
+        res = run_inf(images[id], size);
+        hwExecTime = cntRead();
 
-    printf("inference result img_5: %d\n", res);
+        printf("EXPECTED %d, RETURNED %d\n", results[id], res);
 
+    }
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
+    printf("================================\n");
+    
     return 0;
 }

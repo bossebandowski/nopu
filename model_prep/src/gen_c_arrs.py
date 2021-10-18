@@ -33,6 +33,7 @@ def save_conv_weights(fname, weights, padding=0):
 
 
 def parse_fc_weights(weights, name):
+    weights = np.transpose(weights, (1, 0))
     len_x, len_y = weights.shape
     out = "const int8_t " + name + "[" + str(len_x * len_y) + "] = {\n\t"
     for x in range(len_x):
@@ -80,7 +81,7 @@ def save_example_images(count):
 
     image_file_content = header
     result_arr = "const int results[" + str(count) + "] = {\n"
-    collection_arr = "const int* images[" + str(count) + "] = {\n"
+    collection_arr = "const int32_t* images[" + str(count) + "] = {\n"
     
     for i in range(count):
         content, label = parse_example_img(i, test_images, test_labels)
@@ -110,7 +111,7 @@ def main():
     with open("../tmp/" + param_fname + ".h", "w") as f:
         f.write(param_file_content)
 
-    save_example_images(100)
+    save_example_images(10)
 
     
     
