@@ -198,6 +198,7 @@ if __name__ == "__main__":
         save_model(model)
     else:
         model = load_model()
+        model.summary()
 
     path32 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model.tflite")
     path16 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x16_model.tflite")

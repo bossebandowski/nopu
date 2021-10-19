@@ -7,6 +7,7 @@ footer = "};\n"
 network_path = "/home/bossebandowski/nopu/model_prep/models/8x32_model.tflite"
 param_fname = "parameters"
 image_fname = "images"
+param_path = "../../model_parameters/"
 
 def save_conv_weights(fname, weights, padding=0):
     c_out, dim_x, dim_y, c_in = weights.shape
@@ -108,10 +109,10 @@ def main():
         layers[dict["index"]] = {"name": dict["name"], "tensor": interpreter.tensor(dict["index"])()}
         
     param_file_content = extract_layer_parameters(layers)
-    with open("../tmp/" + param_fname + ".h", "w") as f:
+    with open(param_path + param_fname + ".h", "w") as f:
         f.write(param_file_content)
 
-    save_example_images(10)
+    # save_example_images(10)
 
     
     

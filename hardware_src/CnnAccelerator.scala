@@ -1,5 +1,5 @@
 /*
-simple coprocessor entity to explore accelerator interface
+A CNN accelerator: https://github.com/bossebandowski/nopu
 Author: Bosse Bandowski (bosse.bandowski@outlook.com)
 */
 
@@ -60,7 +60,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val weightAddr = RegInit(0.U(DATA_WIDTH.W))
     val biasAddr = RegInit(0.U(DATA_WIDTH.W))
     val outAddr = RegInit(0.U(DATA_WIDTH.W))
-    val layer = RegInit(0.U(1.W))
+    val layer = RegInit(0.U(8.W))
     
 
     val num_layers = 2
@@ -83,19 +83,52 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
 /* ================================================= CONSTANTS ============================================= */ 
 
+/*
     // address constants
     layer_meta_t(0) := fc
     layer_meta_t(1) := fc
+    layer_meta_t(2) := fc
+
     layer_meta_a(0) := b_add_relu_0
-    layer_meta_a(1) := b_add
+    layer_meta_a(1) := b_add_relu_0
+    layer_meta_a(2) := b_add
+
     layer_meta_w(0) := 1000000.U
-    layer_meta_w(1) := 1320000.U
-    layer_meta_b(0) := 1325000.U
-    layer_meta_b(1) := 1326000.U
+    layer_meta_w(1) := 1100000.U
+    layer_meta_w(2) := 1200000.U
+
+    layer_meta_b(0) := 1300000.U
+    layer_meta_b(1) := 1310000.U
+    layer_meta_b(2) := 1320000.U
+
     layer_meta_i(0) := 10000.U
     layer_meta_i(1) := 20000.U
+    layer_meta_i(2) := 30000.U
+
+    layer_meta_s(0) := 64.U
+    layer_meta_s(1) := 64.U
+    layer_meta_s(2) := 12.U
+*/
+
+    // address constants
+    layer_meta_t(0) := fc
+    layer_meta_t(1) := fc
+
+    layer_meta_a(0) := b_add_relu_0
+    layer_meta_a(1) := b_add
+
+    layer_meta_w(0) := 1000000.U
+    layer_meta_w(1) := 1100000.U
+
+    layer_meta_b(0) := 1300000.U
+    layer_meta_b(1) := 1310000.U
+
+    layer_meta_i(0) := 10000.U
+    layer_meta_i(1) := 20000.U
+
     layer_meta_s(0) := 100.U
     layer_meta_s(1) := 12.U
+
 
     val img_addr_0 = 30.U
     val img_size = 784.U
@@ -186,7 +219,6 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             stateReg := load_input_32                       // start inference by loading pixels
 
         }
-
         is(load_input_32) {
             /*
             Read one burst of inputs and only keep the first one.
@@ -378,7 +410,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
         is(b_wr) {
             /*
-            write results of bias_add + activation back to memory
+            write results of bias_add + activation back to memory. Do some state transition magic
             */
             when (memState === memIdle) {                   // wait for memory to be ready
                 mem_w_buffer(0) := relu(0).asUInt           // load outputs into write buffer
@@ -402,7 +434,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 .otherwise {
                     when (layer === num_layers.U - 1.U) {   // when we have reached the last layer
                         stateReg := read_output             // get ready to extract max
-                        maxOut := layer_meta_s(layer)       // set number of output nodes (now only processing one at a time)
+                        maxOut := 9.U                       // set number of output nodes (now only processing one at a time)
                         outAddr := layer_meta_i(layer)      // set node address
                         outCount := 0.U                     // reset node count
                     }
@@ -410,36 +442,14 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                         stateReg := load_input_32                   // get ready to load nodes as inputs
                         outputUsage := mac_32                       // from the load outputs state, we will transition to mac operations
                         layer := layer + 1.U                        // increment layer
-                        inAddr := layer_meta_i(layer)               // set input address
-                        outAddr := layer_meta_i(layer + 1.U)        // set output address
+                        inAddr := layer_meta_i(layer)               // set input address to current layer array
+                        outAddr := layer_meta_i(layer + 1.U)        // set output address to next layer array
                         weightAddr := layer_meta_w(layer + 1.U)     // set weight address to next layer array
                         biasAddr := layer_meta_b(layer + 1.U)       // set bias address to next layer array
                         inCount := 0.U                              // reset input count
                         outCount := 0.U                             // reset output count
-                        maxIn := layer_meta_s(layer) - 1.U          // in layer 2, there are only 100 inputs (former outputs)
-                        maxOut := layer_meta_s(layer + 1.U) - 4.U   // and 10 outputs (10 - 10 % 4 = 8, will actually process 12 nodes of which 2 are ignored)
-                    }
-                }
-            
-                when (layer < num_layers.U - 1.U) {         // when we are not processing the last layer
-                    when(outCount === maxOut) {             // when all biases have been added, prepare for next layer
-                        stateReg := load_input_32           // get ready to load nodes as inputs
-                        outputUsage := mac_32               // from the load outputs state, we will transition to mac operations
-                        layer := layer + 1.U                // increment layer
-                        inAddr := layer_meta_i(layer)       // set input address
-                        outAddr := layer_meta_i(layer + 1.U)// set output address
-                        weightAddr := layer_meta_w(layer + 1.U)       // set weight address to next layer array
-                        biasAddr := layer_meta_b(layer + 1.U)         // set bias address to next layer array
-                        inCount := 0.U                      // reset input count
-                        outCount := 0.U                     // reset output count
-                        maxIn := layer_meta_s(layer) - 1.U  // in layer 2, there are only 100 inputs (former outputs)
-                        maxOut := layer_meta_s(layer + 1.U) - 4.U // and 10 outputs (10 - 10 % 4 = 8, will actually process 12 nodes of which 2 are ignored)
-                    }
-
-                }
-                .otherwise {
-                    when(outCount === maxOut) {             // when all biases have been added, prepare for layer 2
-
+                        maxIn := layer_meta_s(layer) - 1.U          // in input layer, we increment by 1
+                        maxOut := layer_meta_s(layer + 1.U) - 4.U   // in output layer, we increment by 4
                     }
                 }
             }

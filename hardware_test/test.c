@@ -11,16 +11,20 @@
 void load_nn()
 {
     // set fixed address pointers (starting indices of arrays)
-    int *w1p = (int *)1000000;
-    int *w2p = (int *)1320000;
-    int *b1p = (int *)1325000;
-    int *b2p = (int *)1326000;
+    int *w0p = (int *)1000000;
+    int *w1p = (int *)1100000;
+    //int *w2p = (int *)1200000;
+    int *b0p = (int *)1300000;
+    int *b1p = (int *)1310000;
+    //int *b2p = (int *)1320000;
 
     // copy arrays to target memory space
-    memcpy(w1p, param_2_w_fc, sizeof(param_2_w_fc));
-    memcpy(w2p, param_4_w_fc, sizeof(param_4_w_fc));
-    memcpy(b1p, param_3_b, sizeof(param_3_b));
-    memcpy(b2p, param_5_b, sizeof(param_5_b));
+    memcpy(w0p, param_2_w_fc, sizeof(param_2_w_fc));
+    memcpy(w1p, param_4_w_fc, sizeof(param_4_w_fc));
+    //memcpy(w2p, param_6_w_fc, sizeof(param_6_w_fc));
+    memcpy(b0p, param_3_b, sizeof(param_3_b));
+    memcpy(b1p, param_5_b, sizeof(param_5_b));
+    //memcpy(b2p, param_7_b, sizeof(param_7_b));
 }
 
 void print_default_locations()
@@ -32,8 +36,8 @@ void print_default_locations()
     int imgp0 = (int)&images[0][0];
     int imgpn = (int)&images[9][783];
 
-    printf("the first weight of the 1st layer %ld is stored at address %u\n", param_2_w_fc[0], w1p);
-    printf("the first weight of the 2nd layer %ld is stored at address %u\n", param_4_w_fc[0], w2p);
+    printf("the first weight of the 1st layer %hhd is stored at address %u\n", param_2_w_fc[0], w1p);
+    printf("the first weight of the 2nd layer %hhd is stored at address %u\n", param_4_w_fc[0], w2p);
     printf("the first bias of the 1st layer %ld is stored at address %u\n", param_3_b[0], b1p);
     printf("the first bias of the 2nd layer %ld is stored at address %u\n", param_5_b[0], b2p);
     printf("the first pixel of the first image %ld is stored at address %u\n", images[0][0], imgp0);
@@ -78,16 +82,16 @@ void read_raw_outputs()
 {
     for (int i = 0; i < 10; i++)
     {
-        cop_mem_r(20000 + i * 4);
+        cop_mem_r(30000 + i * 4);
         printf("%d: %lx\n", i, cop_get_res());
     }
 }
 
-void print_intermediate_layer_head()
+void print_intermediate_layer_head(int layer)
 {
     for (int i = 0; i < 20; i++)
     {
-        cop_mem_r(10000 + i * 4);
+        cop_mem_r(10000 * (layer + 1) + i * 4);
         printf("%d: %lx\n", i, cop_get_res());
     }
 }
@@ -101,14 +105,15 @@ int run_inf(const int32_t img[], int size) {
 int main(int argc, char **argv)
 {
     // load nn parameters into desired memory space. In the future, this will be copying from flash to sram
+    printf("Loading network...");
     load_nn();
+    printf("done\n");
 
     int res;
     int hwExecTime;
     int size = 784*4;
+
     for (int id = 0; id < 10; id++) {
-
-
         // reset the count
         cntReset();
 
@@ -117,7 +122,6 @@ int main(int argc, char **argv)
         hwExecTime = cntRead();
 
         printf("EXPECTED %d, RETURNED %d\n", results[id], res);
-
     }
 
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
