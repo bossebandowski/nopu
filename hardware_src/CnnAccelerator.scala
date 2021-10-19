@@ -35,10 +35,14 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val stateReg = RegInit(0.U(8.W))
     val outputUsage = RegInit(0.U(8.W))
 
-
     // state MEM
     val memIdle :: memDone :: memReadReq :: memRead :: memWriteReq :: memWrite :: Nil = Enum(6)
     val memState = RegInit(memIdle)
+
+    // layer types
+    val fc :: conv :: pool :: Nil = Enum(3)
+    // activations
+    val rl :: softmax :: Nil = Enum(2)
 
     // auxiliary registers
     val addrReg = RegInit(0.U(DATA_WIDTH.W))
@@ -59,6 +63,14 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val layer = RegInit(0.U(1.W))
     
 
+    val num_layers = 2
+    val layer_meta_a = Reg(Vec(num_layers, UInt(8.W)))         // layer activations
+    val layer_meta_t = Reg(Vec(num_layers, UInt(8.W)))         // layer types
+    val layer_meta_s = Reg(Vec(num_layers, UInt(32.W)))        // layer sizes (for fc: number of nodes)
+    val layer_meta_w = Reg(Vec(num_layers, UInt(32.W)))        // point to layer weight addresses
+    val layer_meta_b = Reg(Vec(num_layers, UInt(32.W)))        // point to layer biases
+    val layer_meta_i = Reg(Vec(num_layers, UInt(32.W)))        // point to intermediate results (nodes)
+
     val ws = Reg(Vec(BURST_LENGTH, SInt(8.W)))
     val ins32 = Reg(Vec(BURST_LENGTH, SInt(32.W)))
     val outs = Reg(Vec(BURST_LENGTH, SInt(32.W)))
@@ -72,13 +84,21 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 /* ================================================= CONSTANTS ============================================= */ 
 
     // address constants
+    layer_meta_t(0) := fc
+    layer_meta_t(1) := fc
+    layer_meta_a(0) := b_add_relu_0
+    layer_meta_a(1) := b_add
+    layer_meta_w(0) := 1000000.U
+    layer_meta_w(1) := 1320000.U
+    layer_meta_b(0) := 1325000.U
+    layer_meta_b(1) := 1326000.U
+    layer_meta_i(0) := 10000.U
+    layer_meta_i(1) := 20000.U
+    layer_meta_s(0) := 100.U
+    layer_meta_s(1) := 12.U
+
     val img_addr_0 = 30.U
-    val w_1_addr_0 = 1000000.U
-    val w_2_addr_0 = 1320000.U
-    val b_1_addr_0 = 1325000.U
-    val b_2_addr_0 = 1326000.U
-    val n_addr_0 = 10000.U
-    val n_addr_1 = 20000.U
+    val img_size = 784.U
 
     /* ============================================ CMD HANDLING ============================================ */ 
 
@@ -147,9 +167,9 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             If that is not the case by this state, the inference will go horribly wrong.
             */
             inAddr := img_addr_0                            // set first pixel addresss
-            weightAddr := w_1_addr_0                        // set first weight address
-            biasAddr := b_1_addr_0                          // set first bias address
-            outAddr := n_addr_0                             // set first node address
+            weightAddr := layer_meta_w(0)                   // set first weight address
+            biasAddr := layer_meta_b(0)                     // set first bias address
+            outAddr := layer_meta_i(0)                      // set first node address
             inCount := 0.U                                  // reset input count
             outCount := 0.U                                 // reset output count
             layer := 0.U                                    // reset layer count
@@ -158,8 +178,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
             outputUsage := mac_32                           // tell the load_output state where to transition next (mac or bias_add loop)
 
-            maxIn := 783.U                                  // layer 0 has 784 input pixels
-            maxOut := 96.U                                  // there are 100 nodes in layer 1 (last iteration at 96 because 4 calcs/iteration)
+            maxIn := img_size - 1.U                         // layer 0 has 784 input pixels
+            maxOut := layer_meta_s(0) - 4.U                 // there are 100 nodes in layer 1 (last iteration at 96 because 4 calcs/iteration)
 
             idx := 0.U                                      // reset idx which is used to figure out the index of the maximum value in the output layer
 
@@ -199,19 +219,11 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 memState := memIdle                         // mark memory as idle
                 stateReg := load_output                     // load outputs next
 
-                
-                
                 ws(3) := mem_r_buffer(0)(7, 0).asSInt       
                 ws(2) := mem_r_buffer(0)(15, 8).asSInt
                 ws(1) := mem_r_buffer(0)(23, 16).asSInt
                 ws(0) := mem_r_buffer(0)(31, 24).asSInt         
-                
-/* for 32 bit wide weights
-                ws(0) := mem_r_buffer(0).asSInt
-                ws(1) := mem_r_buffer(1).asSInt
-                ws(2) := mem_r_buffer(2).asSInt
-                ws(3) := mem_r_buffer(3).asSInt
-*/
+
             }
         }
         is(load_output) {
@@ -276,12 +288,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                     outCount := 0.U                         // reset output count
                     stateReg := load_output                 // next state will be output load
                     outputUsage := load_b                   // after that, transition to bias load
-                    when (layer === 0.U) {                  // set node address depending on current layer
-                        outAddr := n_addr_0
-                    }
-                    .otherwise {
-                        outAddr := n_addr_1
-                    }
+                    outAddr := layer_meta_i(layer)
                 }
                 .elsewhen(inCount < maxIn && outCount === maxOut) {
                     /*
@@ -291,14 +298,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                     inCount := inCount + 1.U                // increment input count
                     inAddr := inAddr + 4.U                  // increment input address by one word
                     stateReg := load_input_32               // in the future, the input layer will map to a different loop because the inputs are less wide
-                    weightAddr := weightAddr + 4.U         // increment weight address by four bytes
-                    
-                    when (layer === 0.U) {                  // reset node address based on current layer         
-                        outAddr := n_addr_0         
-                    }
-                    .otherwise {
-                        outAddr := n_addr_1
-                    }
+                    weightAddr := weightAddr + 4.U          // increment weight address by four bytes
+                    outAddr := layer_meta_i(layer)         
                 }
                 .otherwise {
                     /*
@@ -306,7 +307,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                     */
                     outCount := outCount + 4.U              // increment node count by 4
                     outAddr := outAddr + 16.U               // increment node address by 4 words
-                    weightAddr := weightAddr + 4.U         // increment weight address by 4 bytes
+                    weightAddr := weightAddr + 4.U          // increment weight address by 4 bytes
                     stateReg := load_w_8                    // transition to load weight (same input, different outputs, different weights)
                 }
             }
@@ -323,12 +324,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
             when (memState === memDone) {                   // wait until transaction is finished
                 memState := memIdle                         // mark memory as idle
-                when (layer === 0.U) {                      // different layers have different activations and thus next state (relu or softmax).
-                    stateReg := b_add_relu_0                // layer 0 uses relu
-                }
-                .otherwise {
-                    stateReg := b_add                       // layer has softmax (applied after plain add)
-                }
+                stateReg := layer_meta_a(layer)             // transition to layer's corresponding activation state
 
                 bs(0) := mem_r_buffer(0).asSInt             // get biases from memory read buffer
                 bs(1) := mem_r_buffer(1).asSInt
@@ -396,40 +392,54 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
             when (memState === memDone) {                   // wait until transaction is finished
                 memState := memIdle                         // mark memory as idle
-            
-                when (layer === 0.U) {                      // the state transitions depend on which layer we are in
-                    when(outCount === maxOut) {             // when all biases have been added, prepare for layer 2
-                        stateReg := load_input_32           // get ready to load nodes as inputs
-                        outputUsage := mac_32               // from the load outputs state, we will transition to mac operations
-                        layer := 1.U                        // set flag for second layer
-                        inAddr := n_addr_0                  // set input address
-                        outAddr := n_addr_1                 // set output address
-                        weightAddr := w_2_addr_0            // set weight address to layer 2 array
-                        biasAddr := b_2_addr_0              // set bias address to layer 2 array
-                        inCount := 0.U                      // reset input count
-                        outCount := 0.U                     // reset output count
-                        maxIn := 99.U                       // in layer 2, there are only 100 inputs (former outputs)
-                        maxOut := 8.U                       // and 10 outputs (10 - 10 % 4 = 8, will actually process 12 nodes of which 2 are ignored)
+
+                when (outCount < maxOut) {                  // when there are still biases to be added
+                    outCount := outCount + 4.U              // increment node count by 4
+                    outAddr := outAddr + 16.U               // increment node address by 4 words
+                    biasAddr := biasAddr + 16.U             // increment bias address by 4 words
+                    stateReg := load_output                 // continue with loading the next 4 nodes
+                }
+                .otherwise {
+                    when (layer === num_layers.U - 1.U) {   // when we have reached the last layer
+                        stateReg := read_output             // get ready to extract max
+                        maxOut := layer_meta_s(layer)       // set number of output nodes (now only processing one at a time)
+                        outAddr := layer_meta_i(layer)      // set node address
+                        outCount := 0.U                     // reset node count
                     }
-                    .otherwise{                             // when there are still biases left to be added, do another iteration
-                        outCount := outCount + 4.U          // increment node count by 4
-                        outAddr := outAddr + 16.U           // increment node address by 4 words
-                        biasAddr := biasAddr + 16.U         // increment bias address by 4 words
-                        stateReg := load_output             // continue with loading the next 4 nodes
+                    .otherwise {
+                        stateReg := load_input_32                   // get ready to load nodes as inputs
+                        outputUsage := mac_32                       // from the load outputs state, we will transition to mac operations
+                        layer := layer + 1.U                        // increment layer
+                        inAddr := layer_meta_i(layer)               // set input address
+                        outAddr := layer_meta_i(layer + 1.U)        // set output address
+                        weightAddr := layer_meta_w(layer + 1.U)     // set weight address to next layer array
+                        biasAddr := layer_meta_b(layer + 1.U)       // set bias address to next layer array
+                        inCount := 0.U                              // reset input count
+                        outCount := 0.U                             // reset output count
+                        maxIn := layer_meta_s(layer) - 1.U          // in layer 2, there are only 100 inputs (former outputs)
+                        maxOut := layer_meta_s(layer + 1.U) - 4.U   // and 10 outputs (10 - 10 % 4 = 8, will actually process 12 nodes of which 2 are ignored)
                     }
                 }
-                .elsewhen (layer === 1.U) {
-                    when(outCount === maxOut) {             // when all biases have been added, prepare for layer 2
-                        stateReg := read_output             // get ready to extract max
-                        outCount := 0.U                     // reset node count
-                        maxOut := 9.U                       // set number of output nodes (now only processing one at a time)
-                        outAddr := n_addr_1                 // set node address
+            
+                when (layer < num_layers.U - 1.U) {         // when we are not processing the last layer
+                    when(outCount === maxOut) {             // when all biases have been added, prepare for next layer
+                        stateReg := load_input_32           // get ready to load nodes as inputs
+                        outputUsage := mac_32               // from the load outputs state, we will transition to mac operations
+                        layer := layer + 1.U                // increment layer
+                        inAddr := layer_meta_i(layer)       // set input address
+                        outAddr := layer_meta_i(layer + 1.U)// set output address
+                        weightAddr := layer_meta_w(layer + 1.U)       // set weight address to next layer array
+                        biasAddr := layer_meta_b(layer + 1.U)         // set bias address to next layer array
+                        inCount := 0.U                      // reset input count
+                        outCount := 0.U                     // reset output count
+                        maxIn := layer_meta_s(layer) - 1.U  // in layer 2, there are only 100 inputs (former outputs)
+                        maxOut := layer_meta_s(layer + 1.U) - 4.U // and 10 outputs (10 - 10 % 4 = 8, will actually process 12 nodes of which 2 are ignored)
                     }
-                    .otherwise{
-                        outCount := outCount + 4.U          // increment node count by 4
-                        outAddr := outAddr + 16.U           // increment node address by 4 words
-                        biasAddr := biasAddr + 16.U         // increment bias address by 4 words
-                        stateReg := load_output             // continue with loading the next 4 nodes
+
+                }
+                .otherwise {
+                    when(outCount === maxOut) {             // when all biases have been added, prepare for layer 2
+
                     }
                 }
             }
@@ -474,12 +484,9 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             */
             resReg := idx
             stateReg := reset_memory
-            maxIn := 100.U
-            maxOut := 12.U
+            maxIn := layer_meta_s(0)
             inCount := 0.U
-            outCount := 0.U
-            inAddr := n_addr_0
-            outAddr := n_addr_1
+            inAddr := layer_meta_i(0)
             layer := 0.U
 
             mem_w_buffer := Seq(0.U, 0.U, 0.U, 0.U)
@@ -490,27 +497,22 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             reset network nodes to 0 to be ready for next inference
             */
             when (memState === memIdle) {                   // wait until memory is ready
-                when (layer === 0.U) {
-                    when (inCount >= maxIn) {
-                        layer := 1.U
+                when (inCount >= maxIn) {                   // when done with current layer, transition to next
+                    when (layer < num_layers.U - 1.U) {       // iterate through all intermediate layer
+                        layer := layer + 1.U                // increment layer
+                        maxIn := layer_meta_s(layer + 1.U)  // get layer size 
+                        inCount := 0.U                      // reset count
+                        inAddr := layer_meta_i(layer + 1.U) // update address space
                     }
                     .otherwise {
-                        inCount := inCount + 4.U
-                        inAddr := inAddr + 16.U
-                        addrReg := inAddr
-                        memState := memWriteReq
+                        stateReg := idle                    // when done with last layer, quit
                     }
                 }
-                .elsewhen (layer === 1.U) {
-                    when (outCount >= maxOut) {
-                        stateReg := idle
-                    }
-                    .otherwise {
-                        outCount := outCount + 4.U
-                        outAddr := outAddr + 16.U
-                        addrReg := outAddr
-                        memState := memWriteReq
-                    }
+                .otherwise {                                // overwrite layer memory segment with 0s
+                    inCount := inCount + 4.U
+                    inAddr := inAddr + 16.U
+                    addrReg := inAddr
+                    memState := memWriteReq
                 }
             }
 
