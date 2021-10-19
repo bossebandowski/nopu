@@ -153,6 +153,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             inCount := 0.U                                  // reset input count
             outCount := 0.U                                 // reset output count
             layer := 0.U                                    // reset layer count
+            curMax := -2147483646.S                         // set curmax to low value
+
 
             outputUsage := mac_32                           // tell the load_output state where to transition next (mac or bias_add loop)
 
@@ -480,10 +482,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             outAddr := n_addr_1
             layer := 0.U
 
-            mem_w_buffer(0) := 0.U           // setup to write 0s
-            mem_w_buffer(1) := 0.U
-            mem_w_buffer(2) := 0.U
-            mem_w_buffer(3) := 0.U
+            mem_w_buffer := Seq(0.U, 0.U, 0.U, 0.U)
 
         }
         is(reset_memory) {
@@ -546,6 +545,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             addrReg := 0.U
 
             resReg := 10.U
+            mem_r_buffer := Seq(0.U, 0.U, 0.U, 0.U)
+            mem_w_buffer := Seq(0.U, 0.U, 0.U, 0.U)
 
             memState := memIdle
             stateReg := reset_memory

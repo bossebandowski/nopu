@@ -68,7 +68,7 @@ void read_inputs()
 }
 
 void read_weights() {
-    for (int i = 1000000; i < 1000020; i++) {
+    for (int i = 1000000; i < 1000020; i+=4) {
         cop_mem_r(i);
         printf("%d:\t\t%lx\n", i, cop_get_res());
     }
@@ -106,7 +106,8 @@ int main(int argc, char **argv)
     int res;
     int hwExecTime;
     int size = 784*4;
-    for (int id = 0; id < 5; id++) {
+    for (int id = 0; id < 10; id++) {
+
 
         // reset the count
         cntReset();
@@ -118,6 +119,7 @@ int main(int argc, char **argv)
         printf("EXPECTED %d, RETURNED %d\n", results[id], res);
 
     }
+
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
     printf("================================\n");
     
