@@ -59,4 +59,30 @@ gross execution time per inference (including img load): 1835554
 97.8%
 
 ## Synthesis Report
-Not yet synthesized
+Flow Status	Successful - Wed Oct 20 08:50:25 2021
+
+Quartus Prime Version	19.1.0 Build 670 09/22/2019 Patches 0.02i SJ Lite Edition
+
+Revision Name	patmos
+
+Top-level Entity Name	patmos_top
+
+Family	Cyclone IV E
+
+Device	EP4CE115F29C7
+
+Timing Models	Final
+
+Total logic elements	19,889 / 114,480 ( 17 % )
+
+Total registers	6644
+
+Total pins	57 / 529 ( 11 % )
+
+Total virtual pins	0
+
+Total memory bits	146,624 / 3,981,312 ( 4 % )
+
+Embedded Multiplier 9-bit elements	24 / 532 ( 5 % )
+
+Total PLLs	1 / 4 ( 25 % )
