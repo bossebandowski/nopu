@@ -63,7 +63,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val layer = RegInit(0.U(8.W))
     
 
-    val num_layers = 2
+    val num_layers = 3
     val layer_meta_a = Reg(Vec(num_layers, UInt(8.W)))         // layer activations
     val layer_meta_t = Reg(Vec(num_layers, UInt(8.W)))         // layer types
     val layer_meta_s = Reg(Vec(num_layers, UInt(32.W)))        // layer sizes (for fc: number of nodes)
@@ -83,7 +83,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
 /* ================================================= CONSTANTS ============================================= */ 
 
-/*
+
     // address constants
     layer_meta_t(0) := fc
     layer_meta_t(1) := fc
@@ -108,8 +108,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     layer_meta_s(0) := 64.U
     layer_meta_s(1) := 64.U
     layer_meta_s(2) := 12.U
-*/
 
+/*
     // address constants
     layer_meta_t(0) := fc
     layer_meta_t(1) := fc
@@ -128,7 +128,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
     layer_meta_s(0) := 100.U
     layer_meta_s(1) := 12.U
-
+*/
 
     val img_addr_0 = 30.U
     val img_size = 784.U
@@ -476,6 +476,11 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             outAddr := outAddr + 4.U                        // increment node address by 1 word
             outCount := outCount + 1.U                      // increment node count by 1
 
+            when (outCount === 9.U) {
+                    resReg := outAddr
+                    stateReg := idle
+            }.otherwise{
+
             when (outs(0) > curMax) {                       // if output nodes is larger than current maximum output
                 curMax := outs(0)                           // update current maximum output
                 idx := outCount                             // update index of maximum output
@@ -486,6 +491,9 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
             .otherwise {                                    // otherwise continue with next
                 stateReg := read_output
+            }
+
+
             }
         }
         is(save_max) {

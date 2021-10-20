@@ -13,18 +13,18 @@ void load_nn()
     // set fixed address pointers (starting indices of arrays)
     int *w0p = (int *)1000000;
     int *w1p = (int *)1100000;
-    //int *w2p = (int *)1200000;
+    int *w2p = (int *)1200000;
     int *b0p = (int *)1300000;
     int *b1p = (int *)1310000;
-    //int *b2p = (int *)1320000;
+    int *b2p = (int *)1320000;
 
     // copy arrays to target memory space
     memcpy(w0p, param_2_w_fc, sizeof(param_2_w_fc));
     memcpy(w1p, param_4_w_fc, sizeof(param_4_w_fc));
-    //memcpy(w2p, param_6_w_fc, sizeof(param_6_w_fc));
+    memcpy(w2p, param_6_w_fc, sizeof(param_6_w_fc));
     memcpy(b0p, param_3_b, sizeof(param_3_b));
     memcpy(b1p, param_5_b, sizeof(param_5_b));
-    //memcpy(b2p, param_7_b, sizeof(param_7_b));
+    memcpy(b2p, param_7_b, sizeof(param_7_b));
 }
 
 void print_default_locations()
