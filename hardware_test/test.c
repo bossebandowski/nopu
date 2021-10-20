@@ -47,7 +47,7 @@ void print_default_locations()
 
 void load_img(const int32_t img[], int size)
 {
-    int *im_addr_0 = (int *)30;
+    int *im_addr_0 = (int *)40;
     memcpy(im_addr_0, img, size);
 }
 
@@ -89,10 +89,10 @@ void read_raw_outputs()
 
 void print_intermediate_layer_head(int layer)
 {
-    for (int i = 0; i < 20; i++)
+    for (int i = 0; i < 64; i++)
     {
         cop_mem_r(10000 * (layer + 1) + i * 4);
-        printf("%d: %lx\n", i, cop_get_res());
+        printf("%d: %ld\n", i, cop_get_res());
     }
 }
 
@@ -126,6 +126,5 @@ int main(int argc, char **argv)
 
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
     printf("================================\n");
-    
     return 0;
 }

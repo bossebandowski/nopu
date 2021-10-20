@@ -13,8 +13,8 @@ basic_fc_model = tf.keras.Sequential(
 three_fc_model = tf.keras.Sequential(
     [
         tf.keras.layers.Flatten(input_shape=(28, 28, 1)),
-        tf.keras.layers.Dense(64, activation="relu"),
-        tf.keras.layers.Dense(64, activation="relu"),
+        tf.keras.layers.Dense(32, activation="relu"),
+        tf.keras.layers.Dense(16, activation="relu"),
         tf.keras.layers.Dense(12),
     ]
 )
