@@ -15,7 +15,8 @@ Minor updates to the first release: A simple 784x100x12 neural network with two 
 - Build patmos
 follow the instructions on `https://github.com/t-crest/patmos`
 
-- Clone this repo and use the scripts to build patmos plus the coprocessor and run a test script 
+- Clone this repo and use the scripts to build patmos plus the coprocessor and run a test script.
+  Careful if you are developing in your `~/t-crest/patmos` folder, these scripts might overwrite some files. 
 ```
 chmod +x ./scripts/*.sh
 ./scripts/build_patemu.sh
