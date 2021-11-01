@@ -9,13 +9,13 @@ param_fname = "parameters"
 image_fname = "images"
 param_path = "../../model_parameters/"
 
-def save_conv_weights(fname, weights, padding=0):
+def parse_conv_weights(weights, name, padding=0):
     c_out, dim_x, dim_y, c_in = weights.shape
 
     if padding == 0:
         out = (
             "const int8_t "
-            + fname
+            + name
             + "["
             + str(c_out * dim_x * dim_y * c_in)
             + "] = {\n\t"
@@ -29,8 +29,7 @@ def save_conv_weights(fname, weights, padding=0):
     else:
         raise (ValueError("padding parameter must be 0"))
 
-    with open("../tmp/" + fname + ".c", "w") as f:
-        f.write(out)
+    return out
 
 
 def parse_fc_weights(weights, name):
@@ -68,11 +67,14 @@ def extract_layer_parameters(layers):
     out = header
 
     for layer_id in layers.keys():
+        print(layers[layer_id]["name"])
         if not ";" in layers[layer_id]["name"]:
             if "MatMul" in layers[layer_id]["name"]:
                 out += parse_fc_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_fc")
             elif "BiasAdd" in layers[layer_id]["name"]:
                 out += parse_biases(layers[layer_id]["tensor"], f"param_{layer_id}_b")
+            elif "Conv2D" in layers[layer_id]["name"]:
+                out += parse_conv_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_conv")
 
     return out
 
@@ -113,10 +115,6 @@ def main():
         f.write(param_file_content)
 
     # save_example_images(10)
-
-    
-    
-
 
 if __name__ == "__main__":
     main()

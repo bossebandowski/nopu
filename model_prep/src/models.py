@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-DESCRIPTOR_LIST = ["basic_fc", "three_fc", "basic_conv"]
+DESCRIPTOR_LIST = ["basic_fc", "three_fc", "basic_conv", "min_conv"]
 
 basic_fc_model = tf.keras.Sequential(
     [
@@ -31,6 +31,14 @@ basic_conv_model = tf.keras.Sequential(
     ]
 )
 
+minimal_conv_model = tf.keras.Sequential(
+    [
+        tf.keras.layers.Conv2D(16, (3, 3), activation="relu", input_shape=(28, 28, 1)),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(12),
+    ]
+)
+
 
 def get_model(descriptor):
     if descriptor == "basic_conv":
@@ -39,5 +47,7 @@ def get_model(descriptor):
         return basic_fc_model
     elif descriptor == "three_fc":
         return three_fc_model
+    elif descriptor == "min_conv":
+        return minimal_conv_model
     else:
         raise ValueError("Model descriptor unknown!")
