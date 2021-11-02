@@ -32,7 +32,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // states COP
     val idle :: start :: fc :: conv :: pool :: mem_w :: mem_r :: restart :: reset_memory :: next_layer :: layer_done :: read_output :: find_max :: save_max :: Nil = Enum(14)
     val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: Nil = Enum(12)
-    val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_load_input :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: Nil = Enum(10)
+    val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: Nil = Enum(10)
     val memIdle :: memDone :: memReadReq :: memRead :: memWriteReq :: memWrite :: Nil = Enum(6)
     
     val stateReg = RegInit(0.U(8.W))
@@ -75,16 +75,22 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val layer_meta_s_i = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
     val layer_meta_s_o = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
 
+/*
+    val x = Reg(0.U(DATA_WIDTH.W))
+    val y = Reg(0.U(DATA_WIDTH.W))
+    val w = Reg(28.U(DATA_WIDTH.W))
 
+    val filter3x3 = Reg(Vec(3, UInt(DATA_WIDTH.W)))
+*/
     val ws = Reg(Vec(BURST_LENGTH, SInt(8.W)))
-    val ins32 = Reg(Vec(BURST_LENGTH, SInt(32.W)))
-    val outs = Reg(Vec(BURST_LENGTH, SInt(32.W)))
-    val bs = Reg(Vec(BURST_LENGTH, SInt(32.W)))
+    val ins32 = Reg(Vec(BURST_LENGTH, SInt(DATA_WIDTH.W)))
+    val outs = Reg(Vec(BURST_LENGTH, SInt(DATA_WIDTH.W)))
+    val bs = Reg(Vec(BURST_LENGTH, SInt(DATA_WIDTH.W)))
     val idx = RegInit(0.U(DATA_WIDTH.W))
     val curMax = RegInit(-2147483646.S(DATA_WIDTH.W))
 
-    val inCount = RegInit(0.U(32.W))
-    val outCount = RegInit(0.U(32.W))
+    val inCount = RegInit(0.U(DATA_WIDTH.W))
+    val outCount = RegInit(0.U(DATA_WIDTH.W))
 
 /* ================================================= CONSTANTS ============================================= */ 
 
@@ -333,9 +339,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
     }
 
-
 /* ================================================= FC LAYER ============================================ */
-
 
     switch(fcState) {
         is(fc_idle) {
@@ -556,6 +560,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
     }
+
+/* ================================================= CONV LAYER ============================================ */
 
 /* =================================================== Memory ================================================== */
 
