@@ -12,6 +12,7 @@ import numpy as np
 
 # constants
 MODELS = models.DESCRIPTOR_LIST
+DTYPE = np.int32
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -65,7 +66,7 @@ def get_layer_ids(layers):
 def init_nodes(bas, layers):
     nodes = []
     for ba in bas:
-        nodes.append(np.zeros(layers[ba]["tensor"].size, dtype=np.float32))
+        nodes.append(np.zeros(layers[ba]["tensor"].size, dtype=DTYPE))
 
     return nodes
 
@@ -105,7 +106,7 @@ def apply_filter(ins, filter):
 
 def extract_image_part(image, y, x):
     w = 28
-    out = np.zeros((3, 3))
+    out = np.zeros((3, 3), dtype=DTYPE)
     out[0, 0] = image[(y - 1) * w + x - 1]
     out[0, 1] = image[(y - 1) * w + x]
     out[0, 2] = image[(y - 1) * w + x + 1]
@@ -119,6 +120,7 @@ def extract_image_part(image, y, x):
     return out
 
 def conv(input_layer, output, filters, layer, input_shape):
+    print(filters)
     # input dimensions of image (28x28x1 for MNIST)
     in_x, in_y = input_shape
     # output dimensions of feature maps after convolution assuming 0-padding (26x26)
@@ -126,19 +128,19 @@ def conv(input_layer, output, filters, layer, input_shape):
     # the number of convolutions (16 for minimal conv)
     c_out, _, _, _ = filters[0].shape
     # temporary clone of output layer before flattening, mirroring tf info (26x26x16)
-    outputs = np.zeros((out_x, out_y, c_out))
+    outputs = np.zeros((out_x, out_y, c_out), dtype=DTYPE)
     # for every kernel, produce an output mask
     for a in range(c_out):
         # init output mask
-        out_mask = np.zeros((out_x, out_y))
+        out_mask = np.zeros((out_x, out_y), dtype=DTYPE)
         # load corresponding filter
         filter = filters[0][a]
-        # iterate over input image (and ignore edges)
+        # iterate over input image (and ignore edges) and map to output masks
         for x in range(1, in_x - 1):
             for y in range(1, in_y - 1):
                 ins = extract_image_part(input_layer, x, y)
                 out_mask[x - 1, y - 1] = apply_filter(ins, filter)
-        
+
         outputs[:, :, a] = out_mask
 
 
@@ -150,7 +152,7 @@ def pool(input, output):
 def bias_relu_conv(outputs, biases):
     for i in range(16):
         for j in range(26*26):
-            id = i * 26 * 26 + j
+            id = i + j * 16
             outputs[id] = max(outputs[id] + biases[i], 0)
 
 def bias_relu(outputs, biases, layer):
@@ -218,7 +220,7 @@ if __name__ == "__main__":
     print("===========================")
 
     count = 0
-    num = 50
+    num = 100
 
     for i in range(num):
         inp, label = load_input(i)

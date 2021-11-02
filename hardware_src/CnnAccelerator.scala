@@ -30,10 +30,11 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val FUNC_MEM_R            = "b00101".U(5.W)   // TEST: read a value from memory
 
     // states COP
-    val idle :: start :: load_input_32 :: load_w_8 :: load_output :: mac_32 :: write_out :: load_b :: b_add_relu_0 :: b_add_relu_1 :: b_add :: b_wr :: read_output :: find_max_aux :: save_max :: mem_w :: mem_r :: restart :: reset_memory :: Nil = Enum(19)
+    val idle :: start :: load_input_32 :: load_w_8 :: load_output :: mac_32 :: write_out :: load_b :: b_add_relu_0 :: b_add_relu_1 :: b_add :: b_wr :: read_output :: find_max_aux :: save_max :: mem_w :: mem_r :: restart :: reset_memory :: next_layer :: conv_init :: Nil = Enum(21)
 
     val stateReg = RegInit(0.U(8.W))
     val outputUsage = RegInit(0.U(8.W))
+    val layerType = RegInit(0.U(8.W))
 
     // state MEM
     val memIdle :: memDone :: memReadReq :: memRead :: memWriteReq :: memWrite :: Nil = Enum(6)
@@ -83,35 +84,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
 /* ================================================= CONSTANTS ============================================= */ 
 
-
     // address constants
-    layer_meta_t(0) := fc
-    layer_meta_t(1) := fc
-    layer_meta_t(2) := fc
-
-    layer_meta_a(0) := b_add_relu_0
-    layer_meta_a(1) := b_add_relu_0
-    layer_meta_a(2) := b_add
-
-    layer_meta_w(0) := 1000000.U
-    layer_meta_w(1) := 1100000.U
-    layer_meta_w(2) := 1200000.U
-
-    layer_meta_b(0) := 1300000.U
-    layer_meta_b(1) := 1310000.U
-    layer_meta_b(2) := 1320000.U
-
-    layer_meta_i(0) := 10000.U
-    layer_meta_i(1) := 20000.U
-    layer_meta_i(2) := 30000.U
-
-    layer_meta_s(0) := 32.U
-    layer_meta_s(1) := 16.U
-    layer_meta_s(2) := 12.U
-
-/*
-    // address constants
-    layer_meta_t(0) := fc
+    layer_meta_t(0) := conv
     layer_meta_t(1) := fc
 
     layer_meta_a(0) := b_add_relu_0
@@ -126,9 +100,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     layer_meta_i(0) := 10000.U
     layer_meta_i(1) := 20000.U
 
-    layer_meta_s(0) := 100.U
+    layer_meta_s(0) := Cat(16.U(16.W), 3.U(8.W), 3.U(8.W))
     layer_meta_s(1) := 12.U
-*/
 
     val img_addr_0 = 40.U
     val img_size = 784.U
@@ -203,11 +176,11 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             weightAddr := layer_meta_w(0)                   // set first weight address
             biasAddr := layer_meta_b(0)                     // set first bias address
             outAddr := layer_meta_i(0)                      // set first node address
+            layerType := layer_meta_t(0)                    // set first layer type 
             inCount := 0.U                                  // reset input count
             outCount := 0.U                                 // reset output count
             layer := 0.U                                    // reset layer count
             curMax := -2147483646.S                         // set curmax to low value
-
 
             outputUsage := mac_32                           // tell the load_output state where to transition next (mac or bias_add loop)
 
@@ -216,9 +189,41 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
             idx := 0.U                                      // reset idx which is used to figure out the index of the maximum value in the output layer
 
-            stateReg := load_input_32                       // start inference by loading pixels
-
+            stateReg := next_layer                          // start inference by loading pixels
         }
+
+
+
+
+
+
+
+        is (next_layer) {
+            switch(layerType) {
+                is (fc) {
+                    stateReg := load_input_32
+                }
+                is (conv) {
+                    stateReg := conv_init
+                }
+            }
+        }
+
+        is(conv_init) {
+            stateReg := idle
+        }
+
+
+
+
+
+
+
+
+
+
+
+
         is(load_input_32) {
             /*
             Read one burst of inputs and only keep the first one.

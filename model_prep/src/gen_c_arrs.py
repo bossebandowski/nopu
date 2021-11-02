@@ -25,6 +25,8 @@ def parse_conv_weights(weights, name, padding=0):
                 for c in range(dim_y):
                     for d in range(c_in):
                         out += str(weights[a, b, c, d]) + ",\n\t"
+                out += "0,\n\t"     # add 0 to align odd filter size with burst size
+                    
         out = out[:-3] + "\n" + footer
     else:
         raise (ValueError("padding parameter must be 0"))
