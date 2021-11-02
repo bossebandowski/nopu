@@ -1,80 +1,103 @@
 # nopu
 
-## Introduction
+## Release Notes v0.2
 
-This repo is used to program practical CNN hardware accelerators on FPGA boards. It contains the entire pipeline from model quantization and evaluation to behavioural hardware description.
+- network identical to release v0.1
+- separated FC layer state machine from main accelerator loop to prepare for integration of conv and pool layers
+- decided against increasing number of FC layers due to overflows with 3+ layers
+- added software simulator to develop pseudocode for conv and pool layers. To run it:
+    - prepare environment
+        ```
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install -U pip cython setuptools wheel
+        pip install -r requirements.txt
+        ```
+    - train and quantize model
+        ```
+        cd modelprep/src
+        python quant_pipeline.py --train --model basic_fc
+        ```
+    - run simulator
+        ```
+        python simulator.py
+        ```
 
-## Tested With
-
-- Quartus 2019.1
-- Altera de2-115
-- Python 3.8
-- CUDA 11.1 (Optional, only for GPU support during network prep)
-- Ubuntu 20.04
-
-## Setup
+## Setup and Run
 
 - Build patmos
 follow the instructions on `https://github.com/t-crest/patmos`
 
-- Clone this repo and copy nopu project files into the right patmos locations
-```
-chmod +x ./scripts/*.sh
-./scripts/setup_patmos.sh
-```
-
-- Create venv
-```
-python3 -m venv venv
-source venv/bin/activate
-pip install -U pip cython setuptools wheel
-```
-- Install tensorflow
-```
-pip install tensorflow
-```
-- Install other requirements
-```
-pip install -r requirements.txt
-```
-- Install coco if you want to validate model performance
+- Clone this repo and use the scripts to build patmos plus the coprocessor and run a test script.
+  Careful if you are developing in your `~/t-crest/patmos` folder, these scripts might overwrite some files. 
+    ```
+    chmod +x ./scripts/*.sh
+    ./scripts/build_patemu.sh
+    ./scripts/run_patemu.sh
+    ```
 
 ## Results
 
-## Run
+- **Test script output**
+    ```
+    Loading network...done
+    EXPECTED 7, RETURNED 7
+    EXPECTED 2, RETURNED 2
+    EXPECTED 1, RETURNED 1
+    EXPECTED 0, RETURNED 0
+    EXPECTED 4, RETURNED 4
+    EXPECTED 1, RETURNED 1
+    EXPECTED 4, RETURNED 4
+    EXPECTED 9, RETURNED 9
+    EXPECTED 5, RETURNED 5
+    EXPECTED 9, RETURNED 9
+    gross execution time per inference (including img load): 1769122
+    ```
+- **Speed**
+    - clock cycles per inference: 1769122
+    - max frequency: 80 MHz
+    - inferences per second: 45.22
 
-### Quantize Model
+- **Memory requirements**
 
-### Evaluate Model
+    | component         | datapoints     | width [bit] | kB |
+    |--------------|-----------|------------| --- |
+    | image | 784      | 32        | 3.06
+    | layer 0 weights      | 78400  | 8       | 76.6
+    | layer 0 biases      | 100  | 32       | 0.391
+    | layer 1 weights      | 1000  | 8       | 0.977
+    | layer 1 biases      | 10  | 32       | 0.0391
+    | **sum** | | | **81.1**
 
-### Extract Model Parameters
+- **Accuracy**
+97.58%
 
-### Emulate Accelerator
+## Synthesis Report
 
-To run the accelerator on the patmos emulator, do
+Flow Status	Successful - Tue Nov 02 14:19:12 2021
 
-```
-./scripts/run_patemu.sh
-```
+Quartus Prime Version	19.1.0 Build 670 09/22/2019 Patches 0.02i SJ Lite Edition
 
+Revision Name	patmos
 
-### Synthesize and Program Accelerator
+Top-level Entity Name	patmos_top
 
-First, generate the vhdl code
-```
-cd ~/t-crest/patmos
-make gen
-```
+Family	Cyclone IV E
 
-Then, use quartus to open
-```
-~/t-crest/patmos/hardware/quartus/altde2-115/patmos.qpf
-```
-Then follow the standard procedure for compilation and programming.
-Alternatively, use the patmos cli like so:
+Device	EP4CE115F29C7
 
-```
-make BOOTAPP=bootable-bootloader APP=\<app_name> tools comp gen synth config download
-```
+Timing Models	Final
 
-## Acknowledgements
+Total logic elements	20,157 / 114,480 ( 18 % )
+
+Total registers	6650
+
+Total pins	57 / 529 ( 11 % )
+
+Total virtual pins	0
+
+Total memory bits	146,624 / 3,981,312 ( 4 % )
+
+Embedded Multiplier 9-bit elements	24 / 532 ( 5 % )
+
+Total PLLs	1 / 4 ( 25 % )

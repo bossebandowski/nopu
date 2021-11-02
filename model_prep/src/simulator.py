@@ -163,6 +163,17 @@ def bias(outputs, biases):
     for id in range(len(outputs)):
         outputs[id] = outputs[id] + biases[id]
 
+def process_model_basic_fc(nodes, img, weights, biases):
+    # layer 0
+    mac_fc(img, nodes[0], weights, 0)
+    bias_relu(nodes, biases, 0)
+
+    # last layer
+    mac_fc(nodes[0], nodes[1], weights, 1)
+    bias(nodes[1], biases[1])
+
+    return np.argmax(nodes[-1])
+
 def process_model_three_fc(nodes, img, weights, biases):
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
@@ -208,7 +219,6 @@ if __name__ == "__main__":
     biases = load_biases(bas, layers)
     filters = load_filters(convs, layers)
 
-    res = process_model_conv_minimal(nodes, img, weights, filters, biases)
 
     if args["verbose"]:
         for l_id in range(len(nodes)):
@@ -216,16 +226,13 @@ if __name__ == "__main__":
             for i in range(len(nodes[l_id])):
                 print(i, int(nodes[l_id][i]))
 
-    print(f"EXPECTED {label}, RETURNED {res}")
-    print("===========================")
-
     count = 0
-    num = 100
+    num = 10
 
     for i in range(num):
         inp, label = load_input(i)
         nodes = init_nodes(bas, layers)
-        res = process_model_conv_minimal(nodes, inp, weights, filters, biases)
+        res = process_model_basic_fc(nodes, inp, weights, biases)
 
         print(f"EXPECTED {label}, RETURNED {res}")
         if res == label:
