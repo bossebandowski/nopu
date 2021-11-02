@@ -17,7 +17,7 @@ void load_nn()
     int *b1p = (int *)1310000;
 
     // copy arrays to target memory space
-    memcpy(w0p, param_2_w_conv, sizeof(param_2_w_conv));
+    memcpy(w0p, param_2_w_fc, sizeof(param_2_w_fc));
     memcpy(w1p, param_4_w_fc, sizeof(param_4_w_fc));
     memcpy(b0p, param_3_b, sizeof(param_3_b));
     memcpy(b1p, param_5_b, sizeof(param_5_b));
@@ -85,7 +85,7 @@ void read_raw_outputs()
 
 void print_intermediate_layer_head(int layer)
 {
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 20; i++)
     {
         cop_mem_r(10000 * (layer + 1) + i * 4);
         printf("%d: %ld\n", i, cop_get_res());
