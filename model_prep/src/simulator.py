@@ -167,7 +167,9 @@ def process_model_basic_fc(nodes, img, weights, biases):
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
     bias_relu(nodes, biases, 0)
-
+    print_nodes(nodes)
+    sys.exit(0)
+    
     # last layer
     mac_fc(nodes[0], nodes[1], weights, 1)
     bias(nodes[1], biases[1])
@@ -200,6 +202,13 @@ def process_model_conv_minimal(nodes, img, weights, filters, biases):
 
     return np.argmax(nodes[-1])
 
+def print_nodes(nodes):
+    for l_id in range(len(nodes)):
+        print("==========")
+        for i in range(len(nodes[l_id])):
+            print(i, int(nodes[l_id][i]))
+
+
 if __name__ == "__main__":
     args = parse_args()
 
@@ -219,15 +228,15 @@ if __name__ == "__main__":
     biases = load_biases(bas, layers)
     filters = load_filters(convs, layers)
 
+    res = process_model_basic_fc(nodes, img, weights, biases)
 
     if args["verbose"]:
-        for l_id in range(len(nodes)):
-            print("==========")
-            for i in range(len(nodes[l_id])):
-                print(i, int(nodes[l_id][i]))
+        print_nodes(nodes)
 
+"""
     count = 0
     num = 10
+
 
     for i in range(num):
         inp, label = load_input(i)
@@ -239,3 +248,4 @@ if __name__ == "__main__":
             count += 1
 
     print(f"{100 * count / num}%")
+"""

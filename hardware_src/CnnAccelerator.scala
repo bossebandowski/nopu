@@ -5,18 +5,12 @@ Author: Bosse Bandowski (bosse.bandowski@outlook.com)
 
 package cop
 
+import util.MemorySInt
+import ocp._
+import patmos.Constants._
+
 import chisel3._
 import chisel3.util._
-import patmos.Constants._
-import util._
-import ocp._
-
-object CnnAccelerator extends CoprocessorObject {
-    
-  def init(params: Map[String, String]) = {}
-
-  def create(params: Map[String, String]): CnnAccelerator = Module(new CnnAccelerator())
-}
 
 class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
@@ -30,7 +24,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val FUNC_MEM_R            = "b00101".U(5.W)   // TEST: read a value from memory
 
     // states COP
-    val idle :: start :: fc :: conv :: pool :: mem_w :: mem_r :: restart :: reset_memory :: next_layer :: layer_done :: read_output :: find_max :: save_max :: Nil = Enum(14)
+    val idle :: start :: fc :: conv :: pool :: mem_w :: mem_r :: restart :: reset_memory :: next_layer :: layer_done :: read_output :: find_max :: save_max :: load_image :: write_bram :: clear_layer :: peek_bram :: Nil = Enum(18)
     val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: Nil = Enum(12)
     val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: Nil = Enum(10)
     val memIdle :: memDone :: memReadReq :: memRead :: memWriteReq :: memWrite :: Nil = Enum(6)
@@ -44,14 +38,22 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val outputUsage = RegInit(0.U(8.W))
     val layerType = RegInit(0.U(8.W))
 
-    // state MEM
+    // BRAM memory and default assignments
+    val bram = Module(new MemorySInt())
+    bram.io.wrEna := false.B
+    bram.io.wrAddr := 0.U
+    bram.io.wrData := 0.S
+    bram.io.rdAddr := 0.U
+    val layer_offset = scala.math.pow(2,10).toInt.U
 
     // auxiliary registers
     val addrReg = RegInit(0.U(DATA_WIDTH.W))
+    val addrRegBRAM = RegInit(0.U(DATA_WIDTH.W))
     val resReg = RegInit(10.U(DATA_WIDTH.W))
     val mem_w_buffer = Reg(Vec(BURST_LENGTH, UInt(DATA_WIDTH.W)))
     val mem_r_buffer = Reg(Vec(BURST_LENGTH, UInt(DATA_WIDTH.W)))
     val burst_count_reg = RegInit(0.U(3.W))
+    val bram_count_reg = RegInit(0.U(3.W))
     val relu = Reg(Vec(BURST_LENGTH, SInt(DATA_WIDTH.W)))
 
     val maxIn = RegInit(0.U(DATA_WIDTH.W))
@@ -164,7 +166,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 }
                 is(FUNC_MEM_R) {
                     when(isIdle) {
-                        addrReg := io.copIn.opData(0)
+                        bram.io.rdAddr := io.copIn.opData(0)
                         stateReg := mem_r
                     }
                 }
@@ -191,14 +193,73 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             curMax := -2147483646.S                         // set curmax to low value
             idx := 0.U                                      // reset idx which is used to figure out the index of the maximum value in the output layer
 
-            stateReg := next_layer                          // start inference by loading pixels
+            inCount := 0.U
+            bram_count_reg := 0.U
+            
+            stateReg := load_image                          // start inference by moving image to bram
+            
+            
+            inAddr := layer_meta_i(0)
+            addrRegBRAM := 0.U
+        }
+        is(load_image) {
+            /*
+            Read one burst of inputs
+            For full word inputs only
+            */
+
+            when (memState === memIdle) {                   // wait until memory is ready
+                addrReg := inAddr                           // load current input address
+                memState := memReadReq                      // force memory into read request state
+            }
+
+            when (memState === memDone) {                   // wait until transaction is finished
+                memState := memIdle                         // mark memory as idle
+                stateReg := write_bram                      // load weights next
+                ins32(0) := mem_r_buffer(0).asSInt          // load 4 px
+                ins32(1) := mem_r_buffer(1).asSInt           
+                ins32(2) := mem_r_buffer(2).asSInt           
+                ins32(3) := mem_r_buffer(3).asSInt
+            }
+        }
+        is(write_bram) {
+            /*
+            write image into bram
+            */
+            when (inCount === layer_meta_s_i(0)) {
+                stateReg := next_layer
+            }
+            .otherwise {
+                when (bram_count_reg < BURST_LENGTH.U) {
+                    bram.io.wrEna := true.B
+                    bram.io.wrAddr := addrRegBRAM
+                    bram.io.wrData := ins32(bram_count_reg)
+
+                    bram_count_reg := bram_count_reg + 1.U
+                    addrRegBRAM := addrRegBRAM + 1.U
+                    stateReg := write_bram
+                }
+                .otherwise {
+                    bram_count_reg := 0.U
+                    inAddr := inAddr + 16.U
+                    inCount := inCount + 4.U
+                    stateReg := load_image
+                }
+            }
         }
         is (layer_done) {
             when (layer === num_layers.U - 1.U) {   // when we have reached the last layer
                 stateReg := read_output             // get ready to extract max
                 maxOut := 9.U                       // set number of output nodes (now only processing one at a time)
-                outAddr := layer_meta_o(layer)      // set node address
                 outCount := 0.U                     // reset node count
+                when (layer(0) === 0.U) {           // even last layer
+                    outAddr := layer_offset
+                    bram.io.rdAddr := layer_offset
+                }
+                .otherwise {                        // odd last layer
+                    outAddr := 0.U
+                    bram.io.rdAddr := 0.U
+                }
             }
             .otherwise {
                 stateReg := next_layer                   // get ready to load nodes as inputs
@@ -219,36 +280,41 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
         is(fc) {
             when(fcState === fc_done) {
-                stateReg := layer_done
+                stateReg := clear_layer
                 fcState := fc_idle
             }
         }
         is(conv) {
             when(convState === conv_done) {
-                stateReg := layer_done
+                stateReg := idle // clear_layer
                 convState := conv_idle
+            }
+        }
+        is(clear_layer) {
+            when(outCount < layer_offset) {
+                bram.io.wrEna := true.B
+                bram.io.wrAddr := outAddr
+                bram.io.wrData := 0.S
+                
+                outCount := outCount + 1.U
+                outAddr := outAddr + 1.U
+            }
+            .otherwise {
+                stateReg := layer_done
             }
         }
         is(read_output) {
             /*
             read a single node from the output layer
             */
-            when (memState === memIdle) {                   // wait for memory to be ready
-                addrReg := outAddr                          // set node address
-                memState := memReadReq                      // force memory in ready request state
-            }
-
-            when (memState === memDone) {                   // wait until the transaction is finished
-                memState := memIdle                         // mark memory as idle
-                stateReg := find_max                    // continue to next state in max extract loop
-                outs(0) := mem_r_buffer(0).asSInt           // get first output from memory read buffer
-            }
+            outs(0) := bram.io.rdData
+            stateReg := find_max
         }
         is(find_max) {
             /*
             check if the current output node is larger than all previously seen ones
             */
-            outAddr := outAddr + 4.U                        // increment node address by 1 word
+            outAddr := outAddr + 1.U                        // increment node address by 1 word
             outCount := outCount + 1.U                      // increment node count by 1
 
             when (outs(0) > curMax) {                       // if output nodes is larger than current maximum output
@@ -260,6 +326,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 stateReg := save_max
             }
             .otherwise {                                    // otherwise continue with next
+                bram.io.rdAddr := outAddr + 1.U
                 stateReg := read_output
             }
         }
@@ -270,39 +337,28 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             resReg := idx
             stateReg := reset_memory
 
-            // prepare for clearing intermediate nodes
-            mem_w_buffer := Seq(0.U, 0.U, 0.U, 0.U)
-            layer := 0.U
-            inCount := 0.U
-            inAddr := layer_meta_o(0)
-            maxIn := layer_meta_s_o(0)
+            outCount := 0.U
+            when (layer(0) === 0.U) {                           // even layers
+                outAddr := 0.U
+            }
+            .otherwise {                                        // odd layers
+                outAddr := layer_offset
+            }
         }
         is(reset_memory) {
             /*
-            reset network nodes to 0 to be ready for next inference
+            reset network nodes in last layer to 0 to be ready for next inference
             */
-            when (memState === memIdle) {                   // wait until memory is ready
-                when (inCount >= maxIn) {                   // when done with current layer, transition to next
-                    when (layer < num_layers.U - 1.U) {       // iterate through all intermediate layer
-                        layer := layer + 1.U                // increment layer
-                        maxIn := layer_meta_s_o(layer + 1.U)  // get layer size 
-                        inCount := 0.U                      // reset count
-                        inAddr := layer_meta_o(layer + 1.U) // update address space
-                    }
-                    .otherwise {
-                        stateReg := idle                    // when done with last layer, quit
-                    }
-                }
-                .otherwise {                                // overwrite layer memory segment with 0s
-                    inCount := inCount + 4.U
-                    inAddr := inAddr + 16.U
-                    addrReg := inAddr
-                    memState := memWriteReq
-                }
+            when(outCount < layer_offset) {
+                bram.io.wrEna := true.B
+                bram.io.wrAddr := outAddr
+                bram.io.wrData := 0.S
+                
+                outCount := outCount + 1.U
+                outAddr := outAddr + 1.U
             }
-
-            when (memState === memDone) {                   // wait until transition is finished
-                memState := memIdle                         // mark memory as idle
+            .otherwise {
+                stateReg := idle
             }
         }
         is(mem_w) {
@@ -316,15 +372,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(mem_r) {
-            when (memState === memIdle) {
-                memState := memReadReq
-            }
-
-            when (memState === memDone) {
-                memState := memIdle
-                stateReg := idle
-                resReg := mem_r_buffer(0)
-            }
+            stateReg := idle
+            resReg := bram.io.rdData.asUInt
         }
         is(restart) {
             burst_count_reg := 0.U
@@ -350,35 +399,35 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         is(fc_init) {
             weightAddr := layer_meta_w(layer)                   // set first weight address
             biasAddr := layer_meta_b(layer)                     // set first bias address
-            outAddr := layer_meta_o(layer)                      // set first node address
-            inAddr := layer_meta_i(layer)
-            inCount := 0.U                                  // reset input count
-            outCount := 0.U                                 // reset output count
-            outputUsage := fc_mac                           // tell the load_output state where to transition next (mac or bias_add loop)
+            inCount := 0.U                                      // reset input count
+            outCount := 0.U                                     // reset output count
+            outputUsage := fc_mac                               // tell the load_output state where to transition next (mac or bias_add loop)
             fcState := fc_load_input
-            maxIn := layer_meta_s_i(layer) - 1.U          // in input layer, we increment by 1
-            maxOut := layer_meta_s_o(layer) - 4.U   // in output layer, we increment by 4
+            maxIn := layer_meta_s_i(layer) - 1.U                // in input layer, we increment by 1
+            maxOut := layer_meta_s_o(layer) - 4.U               // in output layer, we increment by 4
+            bram_count_reg := 0.U
+
+            when (layer(0) === 0.U) {                           // even layers
+                outAddr := layer_offset
+                inAddr := 0.U
+                bram.io.rdAddr := 0.U
+            }
+            .otherwise {                                        // odd layers
+                outAddr := 0.U
+                inAddr := layer_offset
+                bram.io.rdAddr := layer_offset
+            }
         }
         is(fc_load_input) {
             /*
-            Read one burst of inputs and only keep the first one.
-            For full word inputs only
+            Read one input from bram
             */
-
-            when (memState === memIdle) {                   // wait until memory is ready
-                addrReg := inAddr                           // load current input address
-                memState := memReadReq                      // force memory into read request state
-            }
-
-            when (memState === memDone) {                   // wait until transaction is finished
-                memState := memIdle                         // mark memory as idle
-                fcState := fc_load_weight                        // load weights next
-                ins32(0) := mem_r_buffer(0).asSInt          // load first input from read buffer (and discard the rest for now)
-            }
+            ins32(0) := bram.io.rdData                          // read single value from bram
+            fcState := fc_load_weight                        // load weights next
         }
         is(fc_load_weight) {
             /*
-            Read one burst of weights of 4 words. If weights are stored as full words, then this will amount to 4 weights
+            read one burst of weights from sram
             */
 
             when (memState === memIdle) {                   // wait until memory is ready                   
@@ -394,28 +443,23 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 ws(1) := mem_r_buffer(0)(23, 16).asSInt
                 ws(2) := mem_r_buffer(0)(15, 8).asSInt
                 ws(3) := mem_r_buffer(0)(7, 0).asSInt
-
+                bram.io.rdAddr := outAddr
             }
         }
         is(fc_load_output) {
             /*
-            Load intermediate network nodes. Since the activations are 32 bits, a single burst returns
-            4 intermediate network nodes. 
+            Load four output nodes from bram. Legacy from ocpburst, could be more
             */
-            when (memState === memIdle) {                   // wait until memory is ready
-                addrReg := outAddr                          // load current output address
-                memState := memReadReq                      // force memory into read request state
+            when (bram_count_reg === BURST_LENGTH.U) {
+                fcState := outputUsage                             // after loading four outputs, transition to mac
+                bram_count_reg := 0.U                               // reset count
             }
-
-            when (memState === memDone) {                   // wait until transaction is finished
-                memState := memIdle                         // mark memory as idle
-                fcState := outputUsage                     // next state could be mac or bias add, depending on progress
-
-                outs(0) := mem_r_buffer(0).asSInt           // load 4 outputs from read buffer
-                outs(1) := mem_r_buffer(1).asSInt
-                outs(2) := mem_r_buffer(2).asSInt
-                outs(3) := mem_r_buffer(3).asSInt
-            }      
+            .otherwise {
+                outs(bram_count_reg) := bram.io.rdData              // read data into out reg array
+                bram_count_reg := bram_count_reg + 1.U              // increment "burst" count
+                bram.io.rdAddr := outAddr + bram_count_reg + 1.U    // set address for next read
+                fcState := fc_load_output                          // stay in this state
+            }
         }
         is(fc_mac) {
             /*
@@ -431,53 +475,60 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
         is(fc_write_output) {
             /*
-            write result back to memory (this could potentially be moved to on-chip memory).
-            Further, defines how to continue based on which inputs and outputs have just been processed
+            Write four output nodes back to bram. Legacy from ocpburst, could be more
             */
 
-            when (memState === memIdle) {                   // wait until memory is ready
-                mem_w_buffer(0) := outs(0).asUInt           // load outputs into write buffer
-                mem_w_buffer(1) := outs(1).asUInt
-                mem_w_buffer(2) := outs(2).asUInt
-                mem_w_buffer(3) := outs(3).asUInt
 
-                addrReg := outAddr                          // make sure that the right output address is still in addrReg
-                memState := memWriteReq                     // force memory into write request state
+            when (bram_count_reg < BURST_LENGTH.U) {
+                bram.io.wrEna := true.B
+                bram.io.wrAddr := outAddr + bram_count_reg
+                bram.io.wrData := outs(bram_count_reg)
+                bram_count_reg := bram_count_reg + 1.U
+                fcState := fc_write_output
             }
+            .otherwise {
+                bram_count_reg := 0.U
 
-            when (memState === memDone) {                   // wait until transition is finished
-                memState := memIdle                         // mark memory as idle
+                when (inCount === maxIn && outCount === maxOut) {   // biases
+                    outCount := 0.U                                 // reset output count
+                    fcState := fc_load_output                       // next state will be output load
 
-                // transitions
-                when (inCount === maxIn && outCount === maxOut) {
-                    /*
-                    when all inputs have been processed and added to all outputs, the mac loop of the current layer is done.
-                    Continue by resetting counts and addresses and move on to adding biases
-                    */
-                    outCount := 0.U                         // reset output count
-                    fcState := fc_load_output                 // next state will be output load
-                    outputUsage := fc_load_bias                   // after that, transition to bias load
-                    outAddr := layer_meta_o(layer)
+                    outputUsage := fc_load_bias                     // after that, transition to bias load
+                    when (layer(0) === 0.U) {                           // even layers
+                        outAddr := layer_offset
+                        bram.io.rdAddr := layer_offset
+                    }
+                    .otherwise {                                        // odd layers
+                        outAddr := 0.U
+                        bram.io.rdAddr := 0.U
+                    }
                 }
-                .elsewhen(inCount < maxIn && outCount === maxOut) {
-                    /*
-                    when the current input has been mac'ed to all outputs, continue to the next input
-                    */
-                    outCount := 0.U                         // reset output count
-                    inCount := inCount + 1.U                // increment input count
-                    inAddr := inAddr + 4.U                  // increment input address by one word
-                    fcState := fc_load_input               // in the future, the input layer will map to a different loop because the inputs are less wide
-                    weightAddr := weightAddr + 4.U          // increment weight address by four bytes
-                    outAddr := layer_meta_o(layer)         
+                .elsewhen(inCount < maxIn && outCount === maxOut) { // next input
+
+                    inCount := inCount + 1.U                        // increment input count
+                    outCount := 0.U                                 // reset output count
+                    fcState := fc_load_input                        // load next input
+                    inAddr := inAddr + 1.U                          // increment input address by 1
+                    bram.io.rdAddr := inAddr + 1.U
+
+                    weightAddr := weightAddr + 4.U                  // increment weight address by 1 word
+
+                    when (layer(0) === 0.U) {                           // even layers
+                        outAddr := layer_offset
+                    }
+                    .otherwise {                                        // odd layers
+                        outAddr := 0.U
+                    }
+
                 }
                 .otherwise {
                     /*
                     when the current input has not yet been mac'ed to all outputs, just continue with the next 4...
                     */
                     outCount := outCount + 4.U              // increment node count by 4
-                    outAddr := outAddr + 16.U               // increment node address by 4 words
+                    outAddr := outAddr + 4.U                // increment node address by 4
                     weightAddr := weightAddr + 4.U          // increment weight address by 4 bytes
-                    fcState := fc_load_weight                    // transition to load weight (same input, different outputs, different weights)
+                    fcState := fc_load_weight               // transition to load weight (same input, different outputs, different weights)
                 }
             }
         }
@@ -505,13 +556,16 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             /*
             add biases to nodes without applying relu
             */
+            fcState := layer_meta_a(layer)
+
 
             relu(0) := bs(0) + outs(0)
             relu(1) := bs(1) + outs(1)
             relu(2) := bs(2) + outs(2)
             relu(3) := bs(3) + outs(3)
 
-            fcState := layer_meta_a(layer)
+            bram_count_reg := 0.U
+
         }
         is(fc_apply_relu) {
             /*
@@ -536,26 +590,32 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             /*
             write results of bias_add + activation back to memory. Do some state transition magic
             */
-            when (memState === memIdle) {                   // wait for memory to be ready
-                mem_w_buffer(0) := relu(0).asUInt           // load outputs into write buffer
-                mem_w_buffer(1) := relu(1).asUInt
-                mem_w_buffer(2) := relu(2).asUInt
-                mem_w_buffer(3) := relu(3).asUInt
-
-                addrReg := outAddr                          // set output address
-                memState := memWriteReq                     // request write transaction
+            when (bram_count_reg < BURST_LENGTH.U) {
+                bram.io.wrEna := true.B
+                bram.io.wrAddr := outAddr + bram_count_reg
+                bram.io.wrData := relu(bram_count_reg)
+                bram_count_reg := bram_count_reg + 1.U
             }
-            when (memState === memDone) {                   // wait until transaction is finished
-                memState := memIdle                         // mark memory as idle
+            .otherwise {
+
+                bram_count_reg := 0.U
 
                 when (outCount < maxOut) {                  // when there are still biases to be added
                     outCount := outCount + 4.U              // increment node count by 4
-                    outAddr := outAddr + 16.U               // increment node address by 4 words
+                    outAddr := outAddr + 4.U                // increment node address by 4
+                    bram.io.rdAddr := outAddr + 4.U
                     biasAddr := biasAddr + 16.U             // increment bias address by 4 words
-                    fcState := fc_load_output                 // continue with loading the next 4 nodes
+                    fcState := fc_load_output               // continue with loading the next 4 nodes
                 }
                 .otherwise {
-                    fcState := fc_done             // get ready to extract max
+                    fcState := fc_done                      // done with layer
+                    outCount := 0.U                         // reset out count
+                    when (layer(0) === 0.U) {               // even layers (inverted here)
+                        outAddr := 0.U
+                    }
+                    .otherwise {                            // odd layers (inverted here)
+                        outAddr := layer_offset
+                    }
                 }
             }
         }
@@ -613,4 +673,11 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
     }
+}
+
+object CnnAccelerator extends CoprocessorObject {
+    
+  def init(params: Map[String, String]) = {}
+
+  def create(params: Map[String, String]): CnnAccelerator = Module(new CnnAccelerator())
 }

@@ -83,11 +83,11 @@ void read_raw_outputs()
     }
 }
 
-void print_intermediate_layer_head(int layer)
+void print_intermediate_layer_head()
 {
     for (int i = 0; i < 20; i++)
     {
-        cop_mem_r(10000 * (layer + 1) + i * 4);
+        cop_mem_r(1024 + i);
         printf("%d: %ld\n", i, cop_get_res());
     }
 }
@@ -119,6 +119,8 @@ int main(int argc, char **argv)
 
         printf("EXPECTED %d, RETURNED %d\n", results[id], res);
     }
+
+    // print_intermediate_layer_head();
 
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
     printf("================================\n");

@@ -7,7 +7,7 @@ model_prep/models/*
 model_prep/datasets/*
 model_prep/tmp/*
 
-hardware_test/images.h
+# hardware_test/images.h
 
 *.pt
 aegean
