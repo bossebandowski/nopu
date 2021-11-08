@@ -26,7 +26,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // states COP
     val idle :: start :: fc :: conv :: pool :: mem_w :: mem_r :: restart :: reset_memory :: next_layer :: layer_done :: read_output :: find_max :: save_max :: load_image :: write_bram :: clear_layer :: peek_bram :: Nil = Enum(18)
     val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: Nil = Enum(12)
-    val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: Nil = Enum(10)
+    val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: conv_addr_set :: conv_out_address_set :: Nil = Enum(12)
     val memIdle :: memDone :: memReadReq :: memRead :: memWriteReq :: memWrite :: Nil = Enum(6)
     
     val stateReg = RegInit(0.U(8.W))
@@ -36,7 +36,6 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val memState = RegInit(memIdle)
 
     val outputUsage = RegInit(0.U(8.W))
-    val layerType = RegInit(0.U(8.W))
 
     // BRAM memory and default assignments
     val bram = Module(new MemorySInt())
@@ -44,7 +43,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     bram.io.wrAddr := 0.U
     bram.io.wrData := 0.S
     bram.io.rdAddr := 0.U
-    val layer_offset = scala.math.pow(2,10).toInt.U
+    val layer_offset = scala.math.pow(2,14).toInt.U
 
     // auxiliary registers
     val addrReg = RegInit(0.U(DATA_WIDTH.W))
@@ -77,13 +76,20 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val layer_meta_s_i = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
     val layer_meta_s_o = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
 
-/*
-    val x = Reg(0.U(DATA_WIDTH.W))
-    val y = Reg(0.U(DATA_WIDTH.W))
-    val w = Reg(28.U(DATA_WIDTH.W))
 
-    val filter3x3 = Reg(Vec(3, UInt(DATA_WIDTH.W)))
-*/
+
+    // conv registers
+    val filter3x3 = Reg(Vec(9, SInt(DATA_WIDTH.W)))
+    val in_map = Reg(Vec(9, SInt(DATA_WIDTH.W)))
+    val conv_addr = RegInit(0.S(DATA_WIDTH.W))
+
+    val x = RegInit(1.S(DATA_WIDTH.W))
+    val y = RegInit(1.S(DATA_WIDTH.W))
+    val dx = RegInit(-1.S(8.W))
+    val dy = RegInit(-1.S(8.W))
+    val w = 28.S
+
+    // fc registers
     val ws = Reg(Vec(BURST_LENGTH, SInt(8.W)))
     val ins32 = Reg(Vec(BURST_LENGTH, SInt(DATA_WIDTH.W)))
     val outs = Reg(Vec(BURST_LENGTH, SInt(DATA_WIDTH.W)))
@@ -97,10 +103,10 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 /* ================================================= CONSTANTS ============================================= */ 
 
     // address constants
-    layer_meta_t(0) := fc
+    layer_meta_t(0) := conv
     layer_meta_t(1) := fc
 
-    layer_meta_a(0) := fc_apply_relu
+    layer_meta_a(0) := conv_apply_relu
     layer_meta_a(1) := fc_write_bias
 
     layer_meta_w(0) := 1000000.U
@@ -116,9 +122,9 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     layer_meta_o(1) := 20000.U
 
     layer_meta_s_i(0) := 784.U
-    layer_meta_s_i(1) := 100.U
+    layer_meta_s_i(1) := 10816.U
 
-    layer_meta_s_o(0) := 100.U
+    layer_meta_s_o(0) := 10816.U
     layer_meta_s_o(1) := 12.U
 
 /* ============================================== CMD HANDLING ============================================ */ 
@@ -187,7 +193,6 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             Prepare for inference. Assumes that model and image are in the defined memory locations.
             If that is not the case by this state, the inference will go horribly wrong.
             */
-            layerType := layer_meta_t(0)                    // set first layer type 
             layer := 0.U                                    // reset layer count
             
             curMax := -2147483646.S                         // set curmax to low value
@@ -247,7 +252,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 }
             }
         }
-        is (layer_done) {
+        is(layer_done) {
             when (layer === num_layers.U - 1.U) {   // when we have reached the last layer
                 stateReg := read_output             // get ready to extract max
                 maxOut := 9.U                       // set number of output nodes (now only processing one at a time)
@@ -266,8 +271,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 layer := layer + 1.U
             }
         }
-        is (next_layer) {
-            switch(layerType) {
+        is(next_layer) {
+            switch(layer_meta_t(layer)) {
                 is (fc) {
                     stateReg := fc
                     fcState := fc_init
@@ -286,12 +291,12 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
         is(conv) {
             when(convState === conv_done) {
-                stateReg := idle // clear_layer
+                stateReg := clear_layer
                 convState := conv_idle
             }
         }
         is(clear_layer) {
-            when(outCount < layer_offset) {
+            when(outCount < layer_offset - 1.U) {
                 bram.io.wrEna := true.B
                 bram.io.wrAddr := outAddr
                 bram.io.wrData := 0.S
@@ -477,8 +482,6 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             /*
             Write four output nodes back to bram. Legacy from ocpburst, could be more
             */
-
-
             when (bram_count_reg < BURST_LENGTH.U) {
                 bram.io.wrEna := true.B
                 bram.io.wrAddr := outAddr + bram_count_reg
@@ -622,6 +625,203 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     }
 
 /* ================================================= CONV LAYER ============================================ */
+
+    switch(convState) {
+        is(conv_idle) {
+            /*
+            do nothing
+            */
+        }
+        is(conv_init) {
+            weightAddr := layer_meta_w(layer)                   // set first weight address
+            biasAddr := layer_meta_b(layer)                     // set first bias address
+            inCount := 0.U                                      // reset input count
+            outCount := 0.U                                     // reset output count
+            convState := conv_load_filter
+            maxIn := 16.U
+            x := 1.S
+            y := 1.S
+            dx := -1.S
+            dy := -1.S
+
+            when (layer(0) === 0.U) {                           // even layers
+                outAddr := layer_offset
+                conv_addr := w + 1.S
+            }
+            .otherwise {                                        // odd layers
+                outAddr := 0.U
+                conv_addr := layer_offset.asSInt + w + 1.S
+            }
+        }
+        is(conv_load_filter) {
+            when (memState === memIdle) {                       // wait until memory is ready
+                addrReg := weightAddr                           // load current input address
+                memState := memReadReq                          // force memory into read request state
+            }
+
+            when (memState === memDone) {                       // wait until transaction is finished
+                memState := memIdle                             // mark memory as idle
+                convState := conv_load_bias                     // load bias next (1:1 match with filters)
+                filter3x3(0) := mem_r_buffer(0)(31, 24).asSInt         // load filter
+                filter3x3(1) := mem_r_buffer(0)(23, 16).asSInt
+                filter3x3(2) := mem_r_buffer(0)(15, 8).asSInt
+                filter3x3(3) := mem_r_buffer(1)(31, 24).asSInt
+                filter3x3(4) := mem_r_buffer(1)(23, 16).asSInt
+                filter3x3(5) := mem_r_buffer(1)(15, 8).asSInt
+                filter3x3(6) := mem_r_buffer(2)(31, 24).asSInt
+                filter3x3(7) := mem_r_buffer(2)(23, 16).asSInt
+                filter3x3(8) := mem_r_buffer(2)(15, 8).asSInt
+            }
+        }
+        is(conv_load_bias) {
+            when (memState === memIdle) {                       // wait until memory is ready
+                addrReg := biasAddr                             // load current input address
+                memState := memReadReq                          // force memory into read request state
+            }
+
+            when (memState === memDone) {                       // wait until transaction is finished
+                memState := memIdle                             // mark memory as idle
+                convState := conv_addr_set                      // load bias next (1:1 match with filters)
+                bs(0) := mem_r_buffer(0).asSInt                 // load single bias for current filter
+            }
+        }
+        is(conv_addr_set) {
+            bram.io.rdAddr := (conv_addr + dx + dy * w).asUInt
+
+            convState := conv_load_input
+        }
+        is(conv_load_input) {
+            in_map(((dx + 1.S) + (dy + 1.S) * 3.S).asUInt) := bram.io.rdData
+
+            when(dx === 1.S && dy === 1.S) {
+                convState := conv_apply_filter
+                outs(0) := 0.S
+                dx := -1.S
+                dy := -1.S
+            }
+            .elsewhen (dx === 1.S && dy < 1.S) {
+                dx := -1.S
+                dy := dy + 1.S
+                convState := conv_addr_set
+            }
+            .otherwise {
+                dx := dx + 1.S
+                convState := conv_addr_set
+            }
+        }
+        is(conv_apply_filter) {
+            outs(0) := outs(0) + filter3x3(((dx + 1.S) + (dy + 1.S) * 3.S).asUInt) * in_map(((dx + 1.S) + (dy + 1.S) * 3.S).asUInt)
+
+            when(dx === 1.S && dy === 1.S) {
+                convState := conv_add_bias
+                dx := -1.S
+                dy := -1.S
+            }
+            .otherwise {
+                when (dx === 1.S && dy < 1.S) {
+                    dx := -1.S
+                    dy := dy + 1.S
+                }
+                .otherwise {
+                    dx := dx + 1.S
+                }
+            }
+        }
+        is(conv_add_bias) {
+            relu(0) := bs(0) + outs(0)
+            convState := conv_apply_relu
+        }
+        is(conv_apply_relu) {
+            when (relu(0) < 0.S) {
+                relu(0) := 0.S
+            }
+            convState := conv_write_output
+        }
+        is(conv_write_output) {
+            bram.io.wrEna := true.B
+            bram.io.wrAddr := outAddr
+            bram.io.wrData := relu(0)
+
+            // transitions
+            when (x === w - 2.S && y === w - 2.S) {
+                when (inCount < maxIn - 1.U) {
+                    // when done with a filter
+                    // get ready to load the next filter and corresponding bias
+                    weightAddr := weightAddr + 12.U
+                    biasAddr := biasAddr + 4.U
+                    // reset x and y
+                    x := 1.S
+                    y := 1.S
+                    // increment filter count
+                    inCount := inCount + 1.U
+                    // reset in address
+                    when (layer(0) === 0.U) {
+                        conv_addr := w + 1.S
+                        outAddr := layer_offset + inCount + 1.U
+                    }
+                    .otherwise {
+                        conv_addr := layer_offset.asSInt + w + 1.S
+                        outAddr := inCount + 1.U
+                    }
+                    
+                    // state transition
+                    convState := conv_load_filter
+                }
+                .otherwise {
+                    // when done with all filters
+                    convState := conv_done                  // done with layer
+                    inCount := 0.U                          // reset in count
+                    outCount := 0.U
+                    when (layer(0) === 0.U) {               // even layers (inverted here)
+                        outAddr := 0.U
+                    }
+                    .otherwise {                            // odd layers (inverted here)
+                        outAddr := layer_offset
+                    }
+                }
+            }
+            // when done with a row
+            .elsewhen (x === w - 2.S && y < w - 2.S) {
+                // reset x
+                x := 1.S
+                // increment y
+                y := y + 1.S
+                // set center of next in map and target address
+                when (layer(0) === 0.U) {
+                    conv_addr := (y + 1.S) * w + 1.S
+                }
+                .otherwise {
+                    conv_addr := layer_offset.asSInt + (y + 1.S) * w + 1.S
+                }
+                // state transition
+                convState := conv_out_address_set
+            }
+            // standard case: done with an input map
+            .otherwise {
+                // increment x
+                x := x + 1.S
+
+                // set center of next in map
+                when (layer(0) === 0.U) {
+                    conv_addr := y * w + x + 1.S
+                }
+                .otherwise {
+                    conv_addr := layer_offset.asSInt + y * w + x + 1.S
+                }
+                // state transition
+                convState := conv_out_address_set
+            }
+        }
+        is(conv_out_address_set) {
+            when (layer(0) === 0.U) {
+                outAddr := ((y - 1.S)* maxIn.asSInt * (w - 2.S) + (x - 1.S) * maxIn.asSInt + inCount.asSInt + layer_offset.asSInt).asUInt
+            }
+            .otherwise {
+                outAddr := ((y - 1.S) * maxIn.asSInt * (w - 2.S) + (x - 1.S) * maxIn.asSInt + inCount.asSInt).asUInt
+            }
+            convState := conv_addr_set
+        }
+    }
 
 /* =================================================== Memory ================================================== */
 

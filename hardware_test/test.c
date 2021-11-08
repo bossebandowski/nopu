@@ -17,28 +17,10 @@ void load_nn()
     int *b1p = (int *)1310000;
 
     // copy arrays to target memory space
-    memcpy(w0p, param_2_w_fc, sizeof(param_2_w_fc));
+    memcpy(w0p, param_2_w_conv, sizeof(param_2_w_conv));
     memcpy(w1p, param_4_w_fc, sizeof(param_4_w_fc));
     memcpy(b0p, param_3_b, sizeof(param_3_b));
     memcpy(b1p, param_5_b, sizeof(param_5_b));
-}
-
-void print_default_locations()
-{
-    int w1p = (int)&param_2_w_fc[0];
-    int w2p = (int)&param_4_w_fc[0];
-    int b1p = (int)&param_3_b[0];
-    int b2p = (int)&param_5_b[0];
-    int imgp0 = (int)&images[0][0];
-    int imgpn = (int)&images[9][783];
-
-    printf("the first weight of the 1st layer %hhd is stored at address %u\n", param_2_w_fc[0], w1p);
-    printf("the first weight of the 2nd layer %hhd is stored at address %u\n", param_4_w_fc[0], w2p);
-    printf("the first bias of the 1st layer %ld is stored at address %u\n", param_3_b[0], b1p);
-    printf("the first bias of the 2nd layer %ld is stored at address %u\n", param_5_b[0], b2p);
-    printf("the first pixel of the first image %ld is stored at address %u\n", images[0][0], imgp0);
-    printf("the last pixel of the last image %ld is stored at address %u\n", images[9][783], imgpn);
-
 }
 
 void load_img(const int32_t img[], int size)
@@ -85,10 +67,10 @@ void read_raw_outputs()
 
 void print_intermediate_layer_head()
 {
-    for (int i = 0; i < 20; i++)
+    for (int i = 0; i < 100; i++)
     {
-        cop_mem_r(1024 + i);
-        printf("%d: %ld\n", i, cop_get_res());
+        cop_mem_r(16384 + 2100 + i);
+        printf("%d: %ld\n", i + 2100, cop_get_res());
     }
 }
 
@@ -100,7 +82,7 @@ int run_inf(const int32_t img[], int size) {
 
 int main(int argc, char **argv)
 {
-    // load nn parameters into desired memory space. In the future, this will be copying from flash to sram
+    // load nn parameters into desired memory space. In the future, this will hopefully be copying from flash to sram
     printf("Loading network...");
     load_nn();
     printf("done\n");

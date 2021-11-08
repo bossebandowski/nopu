@@ -6,7 +6,7 @@ class MemorySInt() extends Module {
     /*
     BRAM memory entity
     */
-    val size = 11
+    val size = 15
     val dataWidth = 32
 
     val io = IO(new Bundle {

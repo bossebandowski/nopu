@@ -120,7 +120,6 @@ def extract_image_part(image, y, x):
     return out
 
 def conv(input_layer, output, filters, layer, input_shape):
-    print(filters)
     # input dimensions of image (28x28x1 for MNIST)
     in_x, in_y = input_shape
     # output dimensions of feature maps after convolution assuming 0-padding (26x26)
@@ -167,9 +166,10 @@ def process_model_basic_fc(nodes, img, weights, biases):
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
     bias_relu(nodes, biases, 0)
-    print_nodes(nodes)
-    sys.exit(0)
     
+    print_nodes()
+    sys.exit(0)
+
     # last layer
     mac_fc(nodes[0], nodes[1], weights, 1)
     bias(nodes[1], biases[1])
@@ -196,6 +196,11 @@ def process_model_conv_minimal(nodes, img, weights, filters, biases):
     conv(img, nodes, filters, 0, (28, 28))
     bias_relu_conv(nodes[0], biases[0])
 
+
+    print_nodes(nodes)
+    sys.exit(0)
+
+
     # layer 1
     mac_fc(nodes[0], nodes[1], weights, 0)
     bias(nodes[1], biases[1])
@@ -203,10 +208,10 @@ def process_model_conv_minimal(nodes, img, weights, filters, biases):
     return np.argmax(nodes[-1])
 
 def print_nodes(nodes):
-    for l_id in range(len(nodes)):
+    for l_id in range(len(nodes)  -1):
         print("==========")
-        for i in range(len(nodes[l_id])):
-            print(i, int(nodes[l_id][i]))
+        for i in range(min(len(nodes[l_id]), 100)):#, 2000)):
+            print(2100 + i, int(nodes[l_id][2100 + i]))
 
 
 if __name__ == "__main__":
@@ -228,12 +233,12 @@ if __name__ == "__main__":
     biases = load_biases(bas, layers)
     filters = load_filters(convs, layers)
 
-    res = process_model_basic_fc(nodes, img, weights, biases)
+    res = process_model_conv_minimal(nodes, img, weights, filters, biases)
 
     if args["verbose"]:
         print_nodes(nodes)
 
-"""
+
     count = 0
     num = 10
 
@@ -241,11 +246,10 @@ if __name__ == "__main__":
     for i in range(num):
         inp, label = load_input(i)
         nodes = init_nodes(bas, layers)
-        res = process_model_basic_fc(nodes, inp, weights, biases)
+        res = process_model_conv_minimal(nodes, inp, weights, filters, biases)
 
         print(f"EXPECTED {label}, RETURNED {res}")
         if res == label:
             count += 1
 
     print(f"{100 * count / num}%")
-"""

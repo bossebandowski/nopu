@@ -17,7 +17,7 @@ def parse_conv_weights(weights, name, padding=0):
             "const int8_t "
             + name
             + "["
-            + str(c_out * dim_x * dim_y * c_in)
+            + str(c_out * dim_x * (dim_y + 1) * c_in)
             + "] = {\n\t"
         )
         for a in range(c_out):
