@@ -80,7 +80,8 @@ def init_nodes(bas, layers):
 def load_input(id):
     mnist = tf.keras.datasets.mnist
     (_, _), (test_images, test_labels) = mnist.load_data()
-    return test_images[id].reshape(784), test_labels[id]
+
+    return test_images[id].reshape(28, 28, 1), test_labels[id]
 
 def load_weights(fcs, layers):
     weights = []
@@ -109,42 +110,32 @@ def mac_fc(input, output, weights, mac_id):
             output[out_id] = output[out_id] + in_param * weight
 
 def apply_filter(ins, filter):
-    return np.multiply(ins, filter.reshape((3, 3))).sum()
+    return np.multiply(ins, filter).sum()
 
-def extract_image_part(image, y, x):
-    w = 28
-    out = np.zeros((3, 3), dtype=DTYPE)
-    out[0, 0] = image[(y - 1) * w + x - 1]
-    out[0, 1] = image[(y - 1) * w + x]
-    out[0, 2] = image[(y - 1) * w + x + 1]
-    out[1, 0] = image[y * w + x - 1]
-    out[1, 1] = image[y * w + x]
-    out[1, 2] = image[y * w + x + 1]
-    out[2, 0] = image[(y + 1) * w + x - 1]
-    out[2, 1] = image[(y + 1) * w + x]
-    out[2, 2] = image[(y + 1) * w + x + 1]
+def extract_input(in_volume, filter_size, x, y):
+    if filter_size == 3:
+        return in_volume[x - 1 : x + 2, y - 1 : y + 2, :]
+    elif filter_size == 5:
+        return in_volume[x - 2 : x + 3, y - 2 : y + 3, :]
+    else:
+        sys.exit("FILTER SIZE NOT IMPLEMENTED")
 
-    return out
-
-def conv(input_layer, output, filters, layer, input_shape):
+def conv(input_layer, output, filters, layer, input_shape, filter_id):
     # input dimensions of image (28x28x1 for MNIST)
-    in_x, in_y = input_shape
-    # output dimensions of feature maps after convolution assuming 0-padding (26x26)
-    out_x, out_y = in_x - 2, in_y - 2
-    # the number of convolutions (16 for minimal conv)
-    c_out, _, _, _ = filters[0].shape
-    # temporary clone of output layer before flattening, mirroring tf info (26x26x16)
+    in_x, in_y, in_z = input_shape
+    c_out, f_x, f_y, c_in = filters[filter_id].shape # in_z and c_in are the same number
+    out_x, out_y = in_x - f_x + 1, in_y - f_y + 1
     outputs = np.zeros((out_x, out_y, c_out), dtype=DTYPE)
     # for every kernel, produce an output mask
     for a in range(c_out):
         # init output mask
         out_mask = np.zeros((out_x, out_y), dtype=DTYPE)
         # load corresponding filter
-        filter = filters[0][a]
+        filter = filters[filter_id][a]
         # iterate over input image (and ignore edges) and map to output masks
         for x in range(1, in_x - 1):
             for y in range(1, in_y - 1):
-                ins = extract_image_part(input_layer, x, y)
+                ins = extract_input(input_layer, f_x, x, y)
                 out_mask[x - 1, y - 1] = apply_filter(ins, filter)
 
         outputs[:, :, a] = out_mask
@@ -194,6 +185,11 @@ def bias(outputs, biases):
         outputs[id] = outputs[id] + biases[id]
 
 def process_model_basic_fc(nodes, img, weights, filters, biases):
+    # a little hack to ensure backwards compatibility (first layer FC)
+    image_as_list = [img]
+    flatten(image_as_list, 0)
+    img = image_as_list[0]
+
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
     bias_relu(nodes, biases, 0)
@@ -205,6 +201,11 @@ def process_model_basic_fc(nodes, img, weights, filters, biases):
     return np.argmax(nodes[-1])
 
 def process_model_three_fc(nodes, img, weights, filters, biases):
+    # a little hack to ensure backwards compatibility (first layer FC)
+    image_as_list = [img]
+    flatten(image_as_list, 0)
+    img = image_as_list[0]
+
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
     bias_relu(nodes, biases, 0)
@@ -221,7 +222,7 @@ def process_model_three_fc(nodes, img, weights, filters, biases):
 
 def process_model_conv_minimal(nodes, img, weights, filters, biases):
     # layer 0
-    conv(img, nodes, filters, 0, (28, 28))
+    conv(img, nodes, filters, 0, (28, 28, 1), 0)
     bias_relu_conv(nodes[0], biases[0])
 
     # flatten
@@ -235,7 +236,7 @@ def process_model_conv_minimal(nodes, img, weights, filters, biases):
 
 def process_model_min_pool(nodes, img, weights, filters, biases):
     # layer 0
-    conv(img, nodes, filters, 0, (28, 28))
+    conv(img, nodes, filters, 0, (28, 28, 1), 0)
     bias_relu_conv(nodes[0], biases[0])
 
     # layer 1: max-pool (2x2)
@@ -247,6 +248,34 @@ def process_model_min_pool(nodes, img, weights, filters, biases):
     # layer 2
     mac_fc(nodes[1], nodes[2], weights, 0)
     bias(nodes[2], biases[1])
+
+    return np.argmax(nodes[-1])
+
+def process_model_basic_conv(nodes, img, weights, filters, biases):
+    # layer 0
+    conv(img, nodes, filters, 0, (28, 28, 1), 0)
+    bias_relu_conv(nodes[0], biases[0])
+
+    # layer 1: max-pool (2x2)
+    max_pool(nodes, (26, 26, 16), (13, 13, 16), (2, 2), 1)
+
+    # layer 2
+    conv(img, nodes, filters, 2, (13, 13, 16), 1)
+    bias_relu_conv(nodes[2], biases[1])
+
+    # layer 3: max-pool (2x2)
+    max_pool(nodes, (11, 11, 16), (5, 5, 16), (2, 2), 3)
+
+    # flatten
+    flatten(nodes, 3)
+
+    # layer 4
+    mac_fc(nodes[3], nodes[4], weights, 0)
+    bias(nodes[4], biases[2])
+
+    # layer 5
+    mac_fc(nodes[4], nodes[5], weights, 1)
+    bias(nodes[5], biases[3])
 
     return np.argmax(nodes[-1])
 
@@ -279,8 +308,7 @@ if __name__ == "__main__":
     elif args["type"] == "three_fc":
         process = process_model_three_fc
     elif args["type"] == "basic_conv":
-        print("basic conv not implemented yet")
-        sys.exit(0)
+        process = process_model_basic_conv
     elif args["type"] == "min_conv":
         process = process_model_conv_minimal
     elif args["type"] == "min_pool":
