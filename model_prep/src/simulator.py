@@ -24,11 +24,11 @@ def parse_args():
         help="specify which layer to print. Valid inputs depend on the model architecture",
     )
     parser.add_argument(
-        "-n",
-        "--node",
+        "-o",
+        "--offset",
         type=int,
         default=0,
-        help="specify which layer to calculate. Valid inputs depend on the model architecture",
+        help="Used to specified which nodes in a given layer to print if they are of particular interest",
     )
     parser.add_argument(
         "-i",
@@ -150,16 +150,40 @@ def conv(input_layer, output, filters, layer, input_shape):
         outputs[:, :, a] = out_mask
 
 
-    output[layer] = outputs.reshape(out_x * out_y * c_out)
+    output[layer] = outputs
 
-def pool(input, output):
-    pass
+def calc_flat_address(x, y, z, mx, my, mz):
+    return x * mz + y * mz * mx + z
+
+def flatten(nodes, layer):
+    x, y, z = nodes[layer].shape
+    nodes[layer] = nodes[layer].reshape(x * y * z)
+
+def max_pool(nodes, in_shape, out_shape, p_shape, layer):
+    inx, iny, inz = in_shape
+    outx, outy, outz = out_shape
+    px, py = p_shape
+    pool_output = np.zeros(out_shape)
+    layer_in = nodes[layer - 1]
+    stride = 2
+
+    for z in range(inz):
+        for y in range(int(iny/stride)):
+            for x in range(int(inx/stride)):
+                max_val = int(-sys.maxsize - 1)
+                for fx in range(px):
+                    for fy in range(py):
+                        max_val = max(max_val, layer_in[stride * x + fx, stride * y + fy, z])
+                pool_output[x, y, z] = max_val
+
+    nodes.insert(layer, pool_output)
 
 def bias_relu_conv(outputs, biases):
-    for i in range(16):
-        for j in range(26*26):
-            id = i + j * 16
-            outputs[id] = max(outputs[id] + biases[i], 0)
+    x, y, z = outputs.shape
+    for i in range(x):
+        for j in range(y):
+            for k in range(z):
+                outputs[i, j, k] = max(outputs[i, j, k] + biases[k], 0)
 
 def bias_relu(outputs, biases, layer):
     for id in range(len(outputs[layer])):
@@ -200,13 +224,33 @@ def process_model_conv_minimal(nodes, img, weights, filters, biases):
     conv(img, nodes, filters, 0, (28, 28))
     bias_relu_conv(nodes[0], biases[0])
 
+    # flatten
+    flatten(nodes, 0)
+
     # layer 1
     mac_fc(nodes[0], nodes[1], weights, 0)
     bias(nodes[1], biases[1])
 
     return np.argmax(nodes[-1])
 
-def print_nodes(nodes, layer, num_nodes=100, offset=2100):
+def process_model_min_pool(nodes, img, weights, filters, biases):
+    # layer 0
+    conv(img, nodes, filters, 0, (28, 28))
+    bias_relu_conv(nodes[0], biases[0])
+
+    # layer 1: max-pool (2x2)
+    max_pool(nodes, (26, 26, 16), (13, 13, 16), (2, 2), 1)
+
+    # flatten
+    flatten(nodes, 1)
+
+    # layer 2
+    mac_fc(nodes[1], nodes[2], weights, 0)
+    bias(nodes[2], biases[1])
+
+    return np.argmax(nodes[-1])
+
+def print_nodes(nodes, layer, num_nodes, offset):
     for i in range(min(len(nodes[layer]), num_nodes)):
         print(offset + i, int(nodes[layer][offset + i]))
 
@@ -252,7 +296,7 @@ if __name__ == "__main__":
 
     if args["layer"] >= 0:
         print("========= intermediate nodes in layer " + str(args["layer"]) + " =========")
-        print_nodes(nodes, args["layer"])
+        print_nodes(nodes, args["layer"], 100, args["offset"])
 
     if args["top10"]:
         print("========= top10 ============")
@@ -262,10 +306,10 @@ if __name__ == "__main__":
         for i in range(num):
             inp, label = load_input(i)
             nodes = init_nodes(bas, layers)
-            res = process_model_conv_minimal(nodes, inp, weights, filters, biases)
+            res = process(nodes, inp, weights, filters, biases)
 
             print(f"EXPECTED {label}, RETURNED {res}")
             if res == label:
                 count += 1
 
-        print(f"{100 * count / num}%")
+        print(f"{100 * count / num}% correct.")
