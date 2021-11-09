@@ -4,7 +4,7 @@ from tensorflow.python.keras.layers import Lambda
 
 header = "#include <stdint.h>\n\n"
 footer = "};\n"
-network_path = "/home/bossebandowski/nopu/model_prep/models/8x32_model.tflite"
+network_path = "../models/8x32_model.tflite"
 param_fname = "parameters"
 image_fname = "images"
 param_path = "../../model_parameters/"
@@ -73,7 +73,7 @@ def extract_layer_parameters(layers):
         if not ";" in layers[layer_id]["name"]:
             if "MatMul" in layers[layer_id]["name"]:
                 out += parse_fc_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_fc")
-            elif "BiasAdd" in layers[layer_id]["name"]:
+            elif "/bias" in layers[layer_id]["name"]:
                 out += parse_biases(layers[layer_id]["tensor"], f"param_{layer_id}_b")
             elif "Conv2D" in layers[layer_id]["name"]:
                 out += parse_conv_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_conv")

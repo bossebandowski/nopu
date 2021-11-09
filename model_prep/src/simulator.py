@@ -20,8 +20,8 @@ def parse_args():
         "-l",
         "--layer",
         type=int,
-        default=0,
-        help="specify which layer to calculate. Valid inputs depend on the model architecture",
+        default=-1,
+        help="specify which layer to print. Valid inputs depend on the model architecture",
     )
     parser.add_argument(
         "-n",
@@ -44,7 +44,14 @@ def parse_args():
         default="../models/8x32_model.tflite",
         help="specify which model to simulate. Full path (absolute or relative)",
     )
-    parser.add_argument("--verbose", action="store_true", help="print resulting values in network nodes")
+    parser.add_argument(
+        "-t",
+        "--type",
+        type=str,
+        default="min_pool",
+        help="specify the model architecture. One of " + str(MODELS)
+    )
+    parser.add_argument("--top10", action="store_true", help="calculate the first then images")
     args = vars(parser.parse_args())
     return args
 
@@ -56,7 +63,7 @@ def get_layer_ids(layers):
         if not ";" in layers[layer_id]["name"]:
             if "MatMul" in layers[layer_id]["name"]:
                 fcs.append(layer_id)
-            elif "BiasAdd" in layers[layer_id]["name"]:
+            elif "/bias" in layers[layer_id]["name"]:
                 bas.append(layer_id)
             elif "Conv2D" in layers[layer_id]["name"]:
                 convs.append(layer_id)
@@ -162,21 +169,18 @@ def bias(outputs, biases):
     for id in range(len(outputs)):
         outputs[id] = outputs[id] + biases[id]
 
-def process_model_basic_fc(nodes, img, weights, biases):
+def process_model_basic_fc(nodes, img, weights, filters, biases):
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
     bias_relu(nodes, biases, 0)
     
-    print_nodes()
-    sys.exit(0)
-
     # last layer
     mac_fc(nodes[0], nodes[1], weights, 1)
     bias(nodes[1], biases[1])
 
     return np.argmax(nodes[-1])
 
-def process_model_three_fc(nodes, img, weights, biases):
+def process_model_three_fc(nodes, img, weights, filters, biases):
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
     bias_relu(nodes, biases, 0)
@@ -196,22 +200,15 @@ def process_model_conv_minimal(nodes, img, weights, filters, biases):
     conv(img, nodes, filters, 0, (28, 28))
     bias_relu_conv(nodes[0], biases[0])
 
-
-    print_nodes(nodes)
-    sys.exit(0)
-
-
     # layer 1
     mac_fc(nodes[0], nodes[1], weights, 0)
     bias(nodes[1], biases[1])
 
     return np.argmax(nodes[-1])
 
-def print_nodes(nodes):
-    for l_id in range(len(nodes)  -1):
-        print("==========")
-        for i in range(min(len(nodes[l_id]), 100)):#, 2000)):
-            print(2100 + i, int(nodes[l_id][2100 + i]))
+def print_nodes(nodes, layer, num_nodes=100, offset=2100):
+    for i in range(min(len(nodes[layer]), num_nodes)):
+        print(offset + i, int(nodes[layer][offset + i]))
 
 
 if __name__ == "__main__":
@@ -233,23 +230,42 @@ if __name__ == "__main__":
     biases = load_biases(bas, layers)
     filters = load_filters(convs, layers)
 
-    res = process_model_conv_minimal(nodes, img, weights, filters, biases)
+    if args["type"] == "basic_fc":
+        process = process_model_basic_fc
+    elif args["type"] == "three_fc":
+        process = process_model_three_fc
+    elif args["type"] == "basic_conv":
+        print("basic conv not implemented yet")
+        sys.exit(0)
+    elif args["type"] == "min_conv":
+        process = process_model_conv_minimal
+    elif args["type"] == "min_pool":
+        process = process_model_min_pool
+    else:
+        print("unknown model architecture descriptor. Exiting...")
+        sys.exit(0)
 
-    if args["verbose"]:
-        print_nodes(nodes)
 
+    res = process(nodes, img, weights, filters, biases)
+    print("========= inference result of image " + str(args["image"]) + " =========")
+    print(f"EXPECTED {label}, RETURNED {res}")
 
-    count = 0
-    num = 10
+    if args["layer"] >= 0:
+        print("========= intermediate nodes in layer " + str(args["layer"]) + " =========")
+        print_nodes(nodes, args["layer"])
 
+    if args["top10"]:
+        print("========= top10 ============")
+        count = 0
+        num = 10
 
-    for i in range(num):
-        inp, label = load_input(i)
-        nodes = init_nodes(bas, layers)
-        res = process_model_conv_minimal(nodes, inp, weights, filters, biases)
+        for i in range(num):
+            inp, label = load_input(i)
+            nodes = init_nodes(bas, layers)
+            res = process_model_conv_minimal(nodes, inp, weights, filters, biases)
 
-        print(f"EXPECTED {label}, RETURNED {res}")
-        if res == label:
-            count += 1
+            print(f"EXPECTED {label}, RETURNED {res}")
+            if res == label:
+                count += 1
 
-    print(f"{100 * count / num}%")
+        print(f"{100 * count / num}%")
