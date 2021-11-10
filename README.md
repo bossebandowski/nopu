@@ -11,7 +11,7 @@
         python3 -m venv venv
         source venv/bin/activate
         pip install -U pip cython setuptools wheel
-        pip install -r requirements.txt
+        pip install -r model_prep/requirements.txt
         ```
     - train and quantize model
         ```
