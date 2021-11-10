@@ -20,6 +20,7 @@ import data_loader
 
 # 3rd party
 import tensorflow as tf
+import tensorflow_model_optimization as tfmot
 import numpy as np
 
 # constants
@@ -168,6 +169,11 @@ def quantize_8x16(model, path):
     # Save the quantized model:
     pathlib.Path(path).write_bytes(tflite_model_quant)
 
+def quantize_8x32_qat(model, path):
+    quantize_model = tfmot.quantization.keras.quantize_model
+    
+    pass
+
 
 def evaluate_model(model_type, test_set, path):
     test_images, test_labels = test_set
@@ -202,6 +208,8 @@ if __name__ == "__main__":
 
     path32 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model.tflite")
     path16 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x16_model.tflite")
+    path32_qat = os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model_qat.tflite")
+
     quantize_8x32(model, path32)
     evaluate_model("q8x32", test_set, path32)
 
@@ -211,3 +219,10 @@ if __name__ == "__main__":
 
     quantize_8x16(model, path16)
     evaluate_model("q8x16", test_set, path16)
+
+    print("=============================================")
+    print("=============================================")
+    print("=============================================")
+
+    quantize_8x32_qat(model, path32_qat)
+    # evaluate_model("q8x32_qat", test_set, path32_qat)

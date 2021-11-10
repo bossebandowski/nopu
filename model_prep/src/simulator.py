@@ -12,7 +12,7 @@ import numpy as np
 
 # constants
 MODELS = models.DESCRIPTOR_LIST
-DTYPE = np.int32
+DTYPE = np.float64
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -176,9 +176,9 @@ def bias_relu_conv(outputs, biases):
             for k in range(z):
                 outputs[i, j, k] = max(outputs[i, j, k] + biases[k], 0)
 
-def bias_relu(outputs, biases, layer):
-    for id in range(len(outputs[layer])):
-        outputs[layer][id] = max(outputs[layer][id] + biases[layer][id], 0)
+def bias_relu(outputs, biases):
+    for id in range(len(outputs)):
+        outputs[id] = max(outputs[id] + biases[id], 0)
 
 def bias(outputs, biases):
     for id in range(len(outputs)):
@@ -192,7 +192,7 @@ def process_model_basic_fc(nodes, img, weights, filters, biases):
 
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
-    bias_relu(nodes, biases, 0)
+    bias_relu(nodes[0], biases[0])
     
     # last layer
     mac_fc(nodes[0], nodes[1], weights, 1)
@@ -208,11 +208,11 @@ def process_model_three_fc(nodes, img, weights, filters, biases):
 
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
-    bias_relu(nodes, biases, 0)
+    bias_relu(nodes[0], biases[0])
     
     # intermediate layers
     mac_fc(nodes[0], nodes[1], weights, 1)
-    bias_relu(nodes, biases, 1)
+    bias_relu(nodes[1], biases[1])
     
     # last layer
     mac_fc(nodes[1], nodes[2], weights, 2)
@@ -245,7 +245,7 @@ def process_model_min_pool(nodes, img, weights, filters, biases):
     # flatten
     flatten(nodes, 1)
 
-    # layer 2
+    # layer 3
     mac_fc(nodes[1], nodes[2], weights, 0)
     bias(nodes[2], biases[1])
 
@@ -260,7 +260,7 @@ def process_model_basic_conv(nodes, img, weights, filters, biases):
     max_pool(nodes, (26, 26, 16), (13, 13, 16), (2, 2), 1)
 
     # layer 2
-    conv(img, nodes, filters, 2, (13, 13, 16), 1)
+    conv(nodes[1], nodes, filters, 2, (13, 13, 16), 1)
     bias_relu_conv(nodes[2], biases[1])
 
     # layer 3: max-pool (2x2)
@@ -271,7 +271,7 @@ def process_model_basic_conv(nodes, img, weights, filters, biases):
 
     # layer 4
     mac_fc(nodes[3], nodes[4], weights, 0)
-    bias(nodes[4], biases[2])
+    bias_relu(nodes[4], biases[2])
 
     # layer 5
     mac_fc(nodes[4], nodes[5], weights, 1)
