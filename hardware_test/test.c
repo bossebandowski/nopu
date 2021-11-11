@@ -13,14 +13,23 @@ void load_nn()
     // set fixed address pointers (starting indices of arrays)
     int *w0p = (int *)1000000;
     int *w1p = (int *)1100000;
-    int *b0p = (int *)1300000;
-    int *b1p = (int *)1310000;
+    int *w2p = (int *)1200000;
+    int *w3p = (int *)1300000;
+    int *b0p = (int *)1500000;
+    int *b1p = (int *)1501000;
+    int *b2p = (int *)1502000;
+    int *b3p = (int *)1503000;
 
     // copy arrays to target memory space
-    memcpy(w0p, param_2_w_conv, sizeof(param_2_w_conv));
-    memcpy(w1p, param_4_w_fc, sizeof(param_4_w_fc));
-    memcpy(b0p, param_3_b, sizeof(param_3_b));
-    memcpy(b1p, param_5_b, sizeof(param_5_b));
+    memcpy(w0p, param_7_w_conv, sizeof(param_7_w_conv));
+    memcpy(w1p, param_10_w_conv, sizeof(param_10_w_conv));
+    memcpy(w2p, param_14_w_fc, sizeof(param_14_w_fc));
+    memcpy(w3p, param_16_w_fc, sizeof(param_16_w_fc));
+
+    memcpy(b0p, param_2_b, sizeof(param_2_b));
+    memcpy(b1p, param_3_b, sizeof(param_3_b));
+    memcpy(b2p, param_4_b, sizeof(param_4_b));
+    memcpy(b3p, param_5_b, sizeof(param_5_b));
 }
 
 void load_img(const int32_t img[], int size)
@@ -69,8 +78,8 @@ void print_intermediate_layer_head()
 {
     for (int i = 0; i < 100; i++)
     {
-        cop_mem_r(16384 + 2100 + i);
-        printf("%d: %ld\n", i + 2100, cop_get_res());
+        cop_mem_r(i);// + 16384);
+        printf("%d: %ld\n", i, cop_get_res());
     }
 }
 
@@ -91,7 +100,7 @@ int main(int argc, char **argv)
     int hwExecTime;
     int size = 784*4;
 
-    for (int id = 0; id < 10; id++) {
+    for (int id = 0; id < 1; id++) {
         // reset the count
         cntReset();
 
@@ -102,7 +111,8 @@ int main(int argc, char **argv)
         printf("EXPECTED %d, RETURNED %d\n", results[id], res);
     }
 
-    // print_intermediate_layer_head();
+    print_intermediate_layer_head();
+
 
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
     printf("================================\n");

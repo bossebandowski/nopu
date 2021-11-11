@@ -12,7 +12,7 @@ import numpy as np
 
 # constants
 MODELS = models.DESCRIPTOR_LIST
-DTYPE = np.float64
+DTYPE = np.int32
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -31,6 +31,13 @@ def parse_args():
         help="Used to specified which nodes in a given layer to print if they are of particular interest",
     )
     parser.add_argument(
+        "-n",
+        "--num_nodes",
+        type=int,
+        default=100,
+        help="Used to specified which nodes in a given layer to print if they are of particular interest",
+    )
+    parser.add_argument(
         "-i",
         "--image",
         type=int,
@@ -41,7 +48,7 @@ def parse_args():
         "-m",
         "--model",
         type=str,
-        default="../models/8x32_model.tflite",
+        default="../models/8x32_model_qat.tflite",
         help="specify which model to simulate. Full path (absolute or relative)",
     )
     parser.add_argument(
@@ -60,13 +67,13 @@ def get_layer_ids(layers):
     bas = []
     convs = []
     for layer_id in layers.keys():
-        if not ";" in layers[layer_id]["name"]:
-            if "MatMul" in layers[layer_id]["name"]:
-                fcs.append(layer_id)
-            elif "/bias" in layers[layer_id]["name"]:
-                bas.append(layer_id)
-            elif "Conv2D" in layers[layer_id]["name"]:
-                convs.append(layer_id)
+        name = layers[layer_id]["name"]
+        if "/MatMul" in name and not "/BiasAdd" in name:
+            fcs.append(layer_id)
+        elif "/bias" in name and not "quant" in name:
+            bas.append(layer_id)
+        elif "/Conv2D" in name and not "/BiasAdd" in name:
+            convs.append(layer_id)
 
     return fcs, bas, convs
 
@@ -132,6 +139,7 @@ def conv(input_layer, output, filters, layer, input_shape, filter_id):
         out_mask = np.zeros((out_x, out_y), dtype=DTYPE)
         # load corresponding filter
         filter = filters[filter_id][a]
+
         # iterate over input image (and ignore edges) and map to output masks
         for x in range(1, in_x - 1):
             for y in range(1, in_y - 1):
@@ -280,6 +288,9 @@ def process_model_basic_conv(nodes, img, weights, filters, biases):
     return np.argmax(nodes[-1])
 
 def print_nodes(nodes, layer, num_nodes, offset):
+    if len(nodes[layer].shape) > 1:
+        flatten(nodes, layer)
+
     for i in range(min(len(nodes[layer]), num_nodes)):
         print(offset + i, int(nodes[layer][offset + i]))
 
@@ -324,7 +335,7 @@ if __name__ == "__main__":
 
     if args["layer"] >= 0:
         print("========= intermediate nodes in layer " + str(args["layer"]) + " =========")
-        print_nodes(nodes, args["layer"], 100, args["offset"])
+        print_nodes(nodes, args["layer"], args["num_nodes"], args["offset"])
 
     if args["top10"]:
         print("========= top10 ============")

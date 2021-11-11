@@ -4,7 +4,7 @@ from tensorflow.python.keras.layers import Lambda
 
 header = "#include <stdint.h>\n\n"
 footer = "};\n"
-network_path = "../models/8x32_model.tflite"
+network_path = "../models/8x32_model_qat.tflite"
 param_fname = "parameters"
 image_fname = "images"
 param_path = "../../model_parameters/"
@@ -21,11 +21,11 @@ def parse_conv_weights(weights, name, padding=0):
             + "] = {\n\t"
         )
         for a in range(c_out):
-            for b in range(dim_x):
-                for c in range(dim_y):
-                    for d in range(c_in):
-                        out += str(weights[a, b, c, d]) + ",\n\t"
-                out += "0,\n\t"     # add 0 to align odd filter size with burst size
+            for d in range(c_in):
+                for b in range(dim_x):
+                    for c in range(dim_y):
+                            out += str(weights[a, b, c, d]) + ",\n\t"
+                    out += "0,\n\t"     # add 0 to align odd filter size with burst size
                     
         out = out[:-3] + "\n" + footer
     else:
@@ -80,6 +80,21 @@ def extract_layer_parameters(layers):
 
     return out
 
+def extract_layer_parameters_qat(layers):
+    out = header
+
+    for layer_id in layers.keys():
+        name = layers[layer_id]["name"] 
+        print(name)
+        if "/MatMul" in name and not "/BiasAdd" in name:
+            out += parse_fc_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_fc")
+        elif "/bias" in name and not "quant" in name:
+            out += parse_biases(layers[layer_id]["tensor"], f"param_{layer_id}_b")
+        elif "/Conv2D" in name and not "/BiasAdd" in name:
+            out += parse_conv_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_conv")
+
+    return out
+
 def save_example_images(count):
     mnist = tf.keras.datasets.mnist
     (_, _), (test_images, test_labels) = mnist.load_data()
@@ -112,7 +127,7 @@ def main():
     for dict in tensor_details:
         layers[dict["index"]] = {"name": dict["name"], "tensor": interpreter.tensor(dict["index"])()}
         
-    param_file_content = extract_layer_parameters(layers)
+    param_file_content = extract_layer_parameters_qat(layers)
     with open(param_path + param_fname + ".h", "w") as f:
         f.write(param_file_content)
 

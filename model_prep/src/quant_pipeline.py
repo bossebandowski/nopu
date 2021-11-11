@@ -92,6 +92,8 @@ def parse_args():
         default="basic_conv",
         help="specify which model to train. Choose between " + str(MODELS),
     )
+    parser.add_argument("--qat", action="store_true", help="retrain qat model. Requires --train flag")
+    parser.add_argument("--ptq", action="store_true", help="apply post training quantization (both 32 and 16 bit activations)")
     args = vars(parser.parse_args())
     return args
 
@@ -103,10 +105,9 @@ Main Functions
 """
 
 
-def train(train_set, test_set, model):
+def train(train_set, model):
     # unpack
     train_images, train_labels = train_set
-    test_images, test_labels = test_set
 
     # Train the digit classification model
     model.compile(
@@ -115,10 +116,44 @@ def train(train_set, test_set, model):
         metrics=["accuracy"],
     )
     model.fit(
-        train_images, train_labels, epochs=5, validation_data=(test_images, test_labels)
+        train_images, train_labels, epochs=5, validation_split=0.1
     )
 
     return model
+
+
+def qat_8x32(train_set, model, path):
+    
+    """
+    code take from
+    https://www.tensorflow.org/model_optimization/guide/quantization/training_example
+    """
+
+
+    train_images, train_labels = train_set
+
+    quantize_model = tfmot.quantization.keras.quantize_model
+    # q_aware stands for for quantization aware.
+    q_aware_model = quantize_model(model)
+
+    # `quantize_model` requires a recompile.
+    q_aware_model.compile(optimizer='adam',
+                loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                metrics=['accuracy'])
+    q_aware_model.summary()
+    # run qat
+    q_aware_model.fit(train_images, train_labels, epochs=5, validation_split=0.1)
+
+    return q_aware_model
+
+def quantize_8x32_qat(model, path):
+    converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+
+    tflite_model_quant = converter.convert()
+    
+    # Save the quantized model:
+    pathlib.Path(path).write_bytes(tflite_model_quant)
 
 
 def quantize_8x32(model, path):
@@ -134,13 +169,6 @@ def quantize_8x32(model, path):
 
     tflite_model_quant = converter.convert()
 
-    # check i/o
-    interpreter = tf.lite.Interpreter(model_content=tflite_model_quant)
-    input_type = interpreter.get_input_details()[0]["dtype"]
-    print("input: ", input_type)
-    output_type = interpreter.get_output_details()[0]["dtype"]
-    print("output: ", output_type)
-
     # Save the quantized model:
     pathlib.Path(path).write_bytes(tflite_model_quant)
 
@@ -153,26 +181,10 @@ def quantize_8x16(model, path):
         tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8
     ]
 
-    # Set the input and output tensors to uint8 (APIs added in r2.3)
-    # converter.inference_input_type = tf.int16
-    # converter.inference_output_type = tf.int16
-
     tflite_model_quant = converter.convert()
-
-    # check i/o
-    interpreter = tf.lite.Interpreter(model_content=tflite_model_quant)
-    input_type = interpreter.get_input_details()[0]["dtype"]
-    print("input: ", input_type)
-    output_type = interpreter.get_output_details()[0]["dtype"]
-    print("output: ", output_type)
 
     # Save the quantized model:
     pathlib.Path(path).write_bytes(tflite_model_quant)
-
-def quantize_8x32_qat(model, path):
-    quantize_model = tfmot.quantization.keras.quantize_model
-    
-    pass
 
 
 def evaluate_model(model_type, test_set, path):
@@ -193,6 +205,7 @@ if __name__ == "__main__":
     args = parse_args()
     # load training data
     train_set, test_set = data_loader.load_mnist()
+    test_images, test_labels = test_set
 
     if args["train"]:
         descriptor = args["model"]
@@ -200,29 +213,38 @@ if __name__ == "__main__":
         model = models.get_model(descriptor)
         model.summary()
         # train model
-        train(train_set, test_set, model)
+        train(train_set, model)
         save_model(model)
+
+        if args["qat"]:
+            path32_qat = os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model_qat.tflite")
+            qat_model = qat_8x32(train_set, model, path32_qat)
+            quantize_8x32_qat(qat_model, path32_qat)
+            evaluate_model("q8x32_qat", test_set, path32_qat)
+
     else:
         model = load_model()
         model.summary()
 
-    path32 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model.tflite")
-    path16 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x16_model.tflite")
-    path32_qat = os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model_qat.tflite")
+    if args["ptq"]:
+        path32 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model.tflite")
+        path16 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x16_model.tflite")
 
-    quantize_8x32(model, path32)
-    evaluate_model("q8x32", test_set, path32)
+        quantize_8x32(model, path32)
+        print("=============================================")
+        print("=============================================")
 
-    print("=============================================")
-    print("=============================================")
-    print("=============================================")
+        evaluate_model("q8x32", test_set, path32)
 
-    quantize_8x16(model, path16)
-    evaluate_model("q8x16", test_set, path16)
+        print("=============================================")
+        print("=============================================")
 
-    print("=============================================")
-    print("=============================================")
-    print("=============================================")
+        quantize_8x16(model, path16)
 
-    quantize_8x32_qat(model, path32_qat)
-    # evaluate_model("q8x32_qat", test_set, path32_qat)
+        print("=============================================")
+        print("=============================================")
+
+        evaluate_model("q8x16", test_set, path16)
+
+        print("=============================================")
+        print("=============================================")
