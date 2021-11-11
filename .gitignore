@@ -6,17 +6,8 @@ model_prep/model_eval/outputs/*
 model_prep/models/*
 model_prep/datasets/*
 model_prep/tmp/*
+tmp
 
 # hardware_test/images.h
 
 *.pt
-aegean
-argo
-compiler-rt
-gold
-llvm
-local
-misc
-newlib
-poseidon
-simulator
