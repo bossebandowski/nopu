@@ -69,7 +69,7 @@ void read_raw_outputs()
 {
     for (int i = 0; i < 10; i++)
     {
-        cop_mem_r(30000 + i * 4);
+        cop_mem_r(i);
         printf("%d: %lx\n", i, cop_get_res());
     }
 }
@@ -78,7 +78,7 @@ void print_intermediate_layer_head()
 {
     for (int i = 0; i < 100; i++)
     {
-        cop_mem_r(i);// + 16384);
+        cop_mem_r(i + 16384);
         printf("%d: %ld\n", i, cop_get_res());
     }
 }
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
     int hwExecTime;
     int size = 784*4;
 
-    for (int id = 0; id < 1; id++) {
+    for (int id = 0; id < 10; id++) {
         // reset the count
         cntReset();
 
@@ -111,8 +111,8 @@ int main(int argc, char **argv)
         printf("EXPECTED %d, RETURNED %d\n", results[id], res);
     }
 
-    print_intermediate_layer_head();
-
+    // print_intermediate_layer_head();
+    // read_raw_outputs();
 
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
     printf("================================\n");

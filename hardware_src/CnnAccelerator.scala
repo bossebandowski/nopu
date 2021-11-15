@@ -306,23 +306,21 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
         is(conv) {
             when(convState === conv_done) {
+
+
                 stateReg := set_offset
                 convState := conv_idle
             }
         }
         is(pool) {
             when(poolState === pool_done) {
-when(layer === 3.U) {
-    stateReg := idle
-}
-.otherwise {
                 stateReg := set_offset
-}
                 poolState := pool_idle
             }
         }
         is(set_offset) {
             stateReg := clear_layer
+            outCount := 0.U
             when (layer(0) === 0.U) {               // even layers (inverted here)
                 outAddr := 0.U
             }
