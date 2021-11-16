@@ -89,13 +89,13 @@ def find_ms(layers):
         name = layers[layer_id]["name"]
         if "/bias" in name and not "quant" in name:
             bias_s.append(layers[layer_id]["qp"]["scales"])
+
         elif "/Relu" in name:
             activation_s.append(layers[layer_id]["qp"]["scales"])
 
     for i in range(len(bias_s) - 1):
         Ms.append(bias_s[i] / activation_s[i])
 
-    print(Ms)
     return Ms
 
 def init_nodes(bas, layers):
@@ -205,20 +205,34 @@ def bias_conv(outputs, biases):
             for k in range(z):
                 outputs[i, j, k] = outputs[i, j, k] + biases[k]
 
-def relu(outputs):
-    for id in range(len(outputs)):
-        outputs[id] = min(max(outputs[id], 0), 127)
+def relu(outputs, conv):
+    if conv:
+        x, y, z = outputs.shape
+        for i in range(x):
+            for j in range(y):
+                for k in range(z):
+                    outputs[i, j, k] = min(max(outputs[i, j, k], 0), 127)
+    else:
+        for id in range(len(outputs)):
+            outputs[id] = min(max(outputs[id], 0), 127)
 
-def type_cast(outputs):
-    outputs = outputs.astype(DTYPE_WEIGHTS)
+def type_cast(outputs, layer):
+    outputs[layer] = outputs[layer].astype(DTYPE_WEIGHTS)
 
 def bias(outputs, biases):
     for id in range(len(outputs)):
         outputs[id] = outputs[id] + biases[id]
 
-def requantize_activations(outputs, layer, M):
-    output_q = outputs[layer] * M
-    outputs[layer] = output_q
+def requantize_activations(outputs, layer, M, conv):
+    if conv:
+        output_q = np.zeros(outputs[layer].shape)
+        for channel in range(len(M)):
+            output_q[:, :, channel] = outputs[layer][:, :, channel] * M[channel]
+        
+        outputs[layer] = output_q
+    else:
+        output_q = outputs[layer] * M
+        outputs[layer] = output_q
 
 def process_model_basic_fc(nodes, img, weights, filters, biases, Ms):
     # a little hack to ensure backwards compatibility (first layer FC)
@@ -229,8 +243,8 @@ def process_model_basic_fc(nodes, img, weights, filters, biases, Ms):
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
     bias(nodes[0], biases[0])
-    requantize_activations(nodes, 0, Ms[0])
-    relu(nodes[0])
+    requantize_activations(nodes, 0, Ms[0], False)
+    relu(nodes[0], False)
     type_cast(nodes[0])
     
     # last layer
@@ -248,15 +262,15 @@ def process_model_three_fc(nodes, img, weights, filters, biases, Ms):
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
     bias(nodes[0], biases[0])
-    requantize_activations(nodes, 0, Ms[0])
-    relu(nodes[0])
+    requantize_activations(nodes, 0, Ms[0], False)
+    relu(nodes[0], False)
     type_cast(nodes[0])
 
     # intermediate layer
     mac_fc(nodes[0], nodes[1], weights, 1)
     bias(nodes[1], biases[1])
-    requantize_activations(nodes, 1, Ms[1])
-    relu(nodes[1])
+    requantize_activations(nodes, 1, Ms[1], False)
+    relu(nodes[1], False)
     type_cast(nodes[1])
     
     # last layer
@@ -268,12 +282,10 @@ def process_model_three_fc(nodes, img, weights, filters, biases, Ms):
 def process_model_conv_minimal(nodes, img, weights, filters, biases, Ms):
     # layer 0
     conv(img, nodes, filters, 0, (28, 28, 1), 0)
-    bias_relu_conv(nodes[0], biases[0])
-
-    requantize_activations(nodes, 0)
-
-    print(np.min(nodes[0]))
-    print(np.max(nodes[0]))
+    bias_conv(nodes[0], biases[0])
+    requantize_activations(nodes, 0, Ms[0], True)
+    relu(nodes[0], True)
+    type_cast(nodes, 0)
 
     # flatten
     flatten(nodes, 0)
@@ -287,7 +299,10 @@ def process_model_conv_minimal(nodes, img, weights, filters, biases, Ms):
 def process_model_min_pool(nodes, img, weights, filters, biases, Ms):
     # layer 0
     conv(img, nodes, filters, 0, (28, 28, 1), 0)
-    bias_relu_conv(nodes[0], biases[0])
+    bias_conv(nodes[0], biases[0])
+    requantize_activations(nodes, 0, Ms[0], True)
+    relu(nodes[0], True)
+    type_cast(nodes, 0)
 
     # layer 1: max-pool (2x2)
     max_pool(nodes, (26, 26, 16), (13, 13, 16), (2, 2), 1)
@@ -305,15 +320,30 @@ def process_model_basic_conv(nodes, img, weights, filters, biases, Ms):
     # layer 0
     conv(img, nodes, filters, 0, (28, 28, 1), 0)
     bias_conv(nodes[0], biases[0])
-    requantize_activations(nodes, 0, Ms[0])
-    relu(nodes[0])
+    requantize_activations(nodes, 0, Ms[0], True)
+    relu(nodes[0], True)
+    type_cast(nodes, 0)
 
     # layer 1: max-pool (2x2)
     max_pool(nodes, (26, 26, 16), (13, 13, 16), (2, 2), 1)
 
     # layer 2
     conv(nodes[1], nodes, filters, 2, (13, 13, 16), 1)
-    bias_relu_conv(nodes[2], biases[1])
+    bias_conv(nodes[2], biases[1])
+    print(np.max(nodes[2]))
+    print(np.min(nodes[2]))
+
+    print(Ms[1])
+    
+    requantize_activations(nodes, 2, Ms[1], True)
+    print(np.max(nodes[2]))
+    print(np.min(nodes[2]))
+    relu(nodes[2], True)
+    type_cast(nodes, 2)
+    print(np.max(nodes[2]))
+    print(np.min(nodes[2]))
+
+
 
     # layer 3: max-pool (2x2)
     max_pool(nodes, (11, 11, 16), (5, 5, 16), (2, 2), 3)
@@ -323,14 +353,14 @@ def process_model_basic_conv(nodes, img, weights, filters, biases, Ms):
 
     # layer 4
     mac_fc(nodes[3], nodes[4], weights, 0)
-    bias_relu(nodes[4], biases[2])
+    bias(nodes[4], biases[2])
+    requantize_activations(nodes, 4, Ms[2], False)
+    relu(nodes[4], False)
+    type_cast(nodes, 4)
 
     # layer 5
     mac_fc(nodes[4], nodes[5], weights, 1)
     bias(nodes[5], biases[3])
-
-    requantize_activations(nodes, 4)
-
 
     return np.argmax(nodes[-1])
 

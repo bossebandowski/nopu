@@ -1,27 +1,10 @@
 # nopu
 
-## Release Notes v0.2
+## Release Notes v1.2
 
-- network identical to release v0.1
-- separated FC layer state machine from main accelerator loop to prepare for integration of conv and pool layers
-- decided against increasing number of FC layers due to overflows with 3+ layers
-- added software simulator to develop pseudocode for conv and pool layers. To run it:
-    - prepare environment
-        ```
-        python3 -m venv venv
-        source venv/bin/activate
-        pip install -U pip cython setuptools wheel
-        pip install -r model_prep/requirements.txt
-        ```
-    - train and quantize model
-        ```
-        cd modelprep/src
-        python quant_pipeline.py --train --model basic_fc
-        ```
-    - run simulator
-        ```
-        python simulator.py
-        ```
+- fixed overflow issues from previous releases
+- basic conv architecture working with MNIST in simulation and in hardware
+
 
 ## Setup and Run
 
