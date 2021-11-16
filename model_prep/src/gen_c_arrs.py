@@ -33,7 +33,6 @@ def parse_conv_weights(weights, name, padding=0):
 
     return out
 
-
 def parse_fc_weights(weights, name):
     weights = np.transpose(weights, (1, 0))
     len_x, len_y = weights.shape
@@ -82,16 +81,30 @@ def extract_layer_parameters(layers):
 
 def extract_layer_parameters_qat(layers):
     out = header
+    ms_string = ""
+    bias_s = []
+    activation_s = []
+    Ms = []
 
     for layer_id in layers.keys():
         name = layers[layer_id]["name"] 
         print(name)
+        
+
         if "/MatMul" in name and not "/BiasAdd" in name:
             out += parse_fc_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_fc")
         elif "/bias" in name and not "quant" in name:
             out += parse_biases(layers[layer_id]["tensor"], f"param_{layer_id}_b")
+            bias_s.append(layers[layer_id]["qp"]["scales"])
         elif "/Conv2D" in name and not "/BiasAdd" in name:
             out += parse_conv_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_conv")
+        elif "/Relu;" in name:
+            activation_s.append(layers[layer_id]["qp"]["scales"])
+
+    for i in range(len(bias_s) - 1):
+        Ms.append(bias_s[i] / activation_s[i])
+
+    print(Ms)
 
     return out
 
@@ -125,7 +138,7 @@ def main():
     layers = {}
 
     for dict in tensor_details:
-        layers[dict["index"]] = {"name": dict["name"], "tensor": interpreter.tensor(dict["index"])()}
+        layers[dict["index"]] = {"name": dict["name"], "tensor": interpreter.tensor(dict["index"])(), "qp": dict["quantization_parameters"]}
         
     param_file_content = extract_layer_parameters_qat(layers)
     with open(param_path + param_fname + ".h", "w") as f:

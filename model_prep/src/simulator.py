@@ -12,7 +12,8 @@ import numpy as np
 
 # constants
 MODELS = models.DESCRIPTOR_LIST
-DTYPE = np.int32
+DTYPE = np.float64
+DTYPE_WEIGHTS = np.int8
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -66,6 +67,8 @@ def get_layer_ids(layers):
     fcs = []
     bas = []
     convs = []
+
+
     for layer_id in layers.keys():
         name = layers[layer_id]["name"]
         if "/MatMul" in name and not "/BiasAdd" in name:
@@ -76,6 +79,24 @@ def get_layer_ids(layers):
             convs.append(layer_id)
 
     return fcs, bas, convs
+
+def find_ms(layers):
+    bias_s = []
+    activation_s = []
+    Ms = []
+
+    for layer_id in layers.keys():
+        name = layers[layer_id]["name"]
+        if "/bias" in name and not "quant" in name:
+            bias_s.append(layers[layer_id]["qp"]["scales"])
+        elif "/Relu" in name:
+            activation_s.append(layers[layer_id]["qp"]["scales"])
+
+    for i in range(len(bias_s) - 1):
+        Ms.append(bias_s[i] / activation_s[i])
+
+    print(Ms)
+    return Ms
 
 def init_nodes(bas, layers):
     nodes = []
@@ -112,8 +133,8 @@ def load_filters(convs, layers):
 def mac_fc(input, output, weights, mac_id):
     for in_id in range(len(input)):
         for out_id in range(len(output)):
-            in_param = input[in_id]
-            weight = weights[mac_id][in_id, out_id]
+            in_param = input[in_id].astype(DTYPE)
+            weight = weights[mac_id][in_id, out_id].astype(DTYPE)
             output[out_id] = output[out_id] + in_param * weight
 
 def apply_filter(ins, filter):
@@ -162,7 +183,7 @@ def max_pool(nodes, in_shape, out_shape, p_shape, layer):
     inx, iny, inz = in_shape
     outx, outy, outz = out_shape
     px, py = p_shape
-    pool_output = np.zeros(out_shape)
+    pool_output = np.zeros(out_shape).astype(DTYPE_WEIGHTS)
     layer_in = nodes[layer - 1]
     stride = 2
 
@@ -177,22 +198,29 @@ def max_pool(nodes, in_shape, out_shape, p_shape, layer):
 
     nodes.insert(layer, pool_output)
 
-def bias_relu_conv(outputs, biases):
+def bias_conv(outputs, biases):
     x, y, z = outputs.shape
     for i in range(x):
         for j in range(y):
             for k in range(z):
-                outputs[i, j, k] = max(outputs[i, j, k] + biases[k], 0)
+                outputs[i, j, k] = outputs[i, j, k] + biases[k]
 
-def bias_relu(outputs, biases):
+def relu(outputs):
     for id in range(len(outputs)):
-        outputs[id] = max(outputs[id] + biases[id], 0)
+        outputs[id] = min(max(outputs[id], 0), 127)
+
+def type_cast(outputs):
+    outputs = outputs.astype(DTYPE_WEIGHTS)
 
 def bias(outputs, biases):
     for id in range(len(outputs)):
         outputs[id] = outputs[id] + biases[id]
 
-def process_model_basic_fc(nodes, img, weights, filters, biases):
+def requantize_activations(outputs, layer, M):
+    output_q = outputs[layer] * M
+    outputs[layer] = output_q
+
+def process_model_basic_fc(nodes, img, weights, filters, biases, Ms):
     # a little hack to ensure backwards compatibility (first layer FC)
     image_as_list = [img]
     flatten(image_as_list, 0)
@@ -200,7 +228,10 @@ def process_model_basic_fc(nodes, img, weights, filters, biases):
 
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
-    bias_relu(nodes[0], biases[0])
+    bias(nodes[0], biases[0])
+    requantize_activations(nodes, 0, Ms[0])
+    relu(nodes[0])
+    type_cast(nodes[0])
     
     # last layer
     mac_fc(nodes[0], nodes[1], weights, 1)
@@ -208,7 +239,7 @@ def process_model_basic_fc(nodes, img, weights, filters, biases):
 
     return np.argmax(nodes[-1])
 
-def process_model_three_fc(nodes, img, weights, filters, biases):
+def process_model_three_fc(nodes, img, weights, filters, biases, Ms):
     # a little hack to ensure backwards compatibility (first layer FC)
     image_as_list = [img]
     flatten(image_as_list, 0)
@@ -216,11 +247,17 @@ def process_model_three_fc(nodes, img, weights, filters, biases):
 
     # layer 0
     mac_fc(img, nodes[0], weights, 0)
-    bias_relu(nodes[0], biases[0])
-    
-    # intermediate layers
+    bias(nodes[0], biases[0])
+    requantize_activations(nodes, 0, Ms[0])
+    relu(nodes[0])
+    type_cast(nodes[0])
+
+    # intermediate layer
     mac_fc(nodes[0], nodes[1], weights, 1)
-    bias_relu(nodes[1], biases[1])
+    bias(nodes[1], biases[1])
+    requantize_activations(nodes, 1, Ms[1])
+    relu(nodes[1])
+    type_cast(nodes[1])
     
     # last layer
     mac_fc(nodes[1], nodes[2], weights, 2)
@@ -228,10 +265,15 @@ def process_model_three_fc(nodes, img, weights, filters, biases):
 
     return np.argmax(nodes[-1])
 
-def process_model_conv_minimal(nodes, img, weights, filters, biases):
+def process_model_conv_minimal(nodes, img, weights, filters, biases, Ms):
     # layer 0
     conv(img, nodes, filters, 0, (28, 28, 1), 0)
     bias_relu_conv(nodes[0], biases[0])
+
+    requantize_activations(nodes, 0)
+
+    print(np.min(nodes[0]))
+    print(np.max(nodes[0]))
 
     # flatten
     flatten(nodes, 0)
@@ -242,7 +284,7 @@ def process_model_conv_minimal(nodes, img, weights, filters, biases):
 
     return np.argmax(nodes[-1])
 
-def process_model_min_pool(nodes, img, weights, filters, biases):
+def process_model_min_pool(nodes, img, weights, filters, biases, Ms):
     # layer 0
     conv(img, nodes, filters, 0, (28, 28, 1), 0)
     bias_relu_conv(nodes[0], biases[0])
@@ -259,10 +301,12 @@ def process_model_min_pool(nodes, img, weights, filters, biases):
 
     return np.argmax(nodes[-1])
 
-def process_model_basic_conv(nodes, img, weights, filters, biases):
+def process_model_basic_conv(nodes, img, weights, filters, biases, Ms):
     # layer 0
     conv(img, nodes, filters, 0, (28, 28, 1), 0)
-    bias_relu_conv(nodes[0], biases[0])
+    bias_conv(nodes[0], biases[0])
+    requantize_activations(nodes, 0, Ms[0])
+    relu(nodes[0])
 
     # layer 1: max-pool (2x2)
     max_pool(nodes, (26, 26, 16), (13, 13, 16), (2, 2), 1)
@@ -285,6 +329,9 @@ def process_model_basic_conv(nodes, img, weights, filters, biases):
     mac_fc(nodes[4], nodes[5], weights, 1)
     bias(nodes[5], biases[3])
 
+    requantize_activations(nodes, 4)
+
+
     return np.argmax(nodes[-1])
 
 def print_nodes(nodes, layer, num_nodes, offset):
@@ -305,9 +352,10 @@ if __name__ == "__main__":
     layers = {}
 
     for dict in tensor_details:
-        layers[dict["index"]] = {"name": dict["name"], "tensor": interpreter.tensor(dict["index"])()}
+        layers[dict["index"]] = {"name": dict["name"], "tensor": interpreter.tensor(dict["index"])(), "qp": dict["quantization_parameters"]}
 
     fcs, bas, convs = get_layer_ids(layers)
+    Ms = find_ms(layers)
     nodes = init_nodes(bas, layers)
     img, label = load_input(args["image"])
     weights = load_weights(fcs, layers)
@@ -329,7 +377,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
 
-    res = process(nodes, img, weights, filters, biases)
+    res = process(nodes, img, weights, filters, biases, Ms)
     print("========= inference result of image " + str(args["image"]) + " =========")
     print(f"EXPECTED {label}, RETURNED {res}")
 
@@ -345,7 +393,7 @@ if __name__ == "__main__":
         for i in range(num):
             inp, label = load_input(i)
             nodes = init_nodes(bas, layers)
-            res = process(nodes, inp, weights, filters, biases)
+            res = process(nodes, inp, weights, filters, biases, Ms)
 
             print(f"EXPECTED {label}, RETURNED {res}")
             if res == label:
