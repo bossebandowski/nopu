@@ -183,7 +183,7 @@ def max_pool(nodes, in_shape, out_shape, p_shape, layer):
     inx, iny, inz = in_shape
     outx, outy, outz = out_shape
     px, py = p_shape
-    pool_output = np.zeros(out_shape).astype(DTYPE_WEIGHTS)
+    pool_output = np.zeros(out_shape).astype(np.uint8)
     layer_in = nodes[layer - 1]
     stride = 2
 
@@ -211,13 +211,13 @@ def relu(outputs, conv):
         for i in range(x):
             for j in range(y):
                 for k in range(z):
-                    outputs[i, j, k] = min(max(outputs[i, j, k], 0), 127)
+                    outputs[i, j, k] = min(max(outputs[i, j, k], 0), 255)
     else:
         for id in range(len(outputs)):
-            outputs[id] = min(max(outputs[id], 0), 127)
+            outputs[id] = min(max(outputs[id], 0), 255)
 
 def type_cast(outputs, layer):
-    outputs[layer] = outputs[layer].astype(DTYPE_WEIGHTS)
+    outputs[layer] = outputs[layer].astype(np.uint8)
 
 def bias(outputs, biases):
     for id in range(len(outputs)):
@@ -245,7 +245,7 @@ def process_model_basic_fc(nodes, img, weights, filters, biases, Ms):
     bias(nodes[0], biases[0])
     requantize_activations(nodes, 0, Ms[0], False)
     relu(nodes[0], False)
-    type_cast(nodes[0])
+    type_cast(nodes, 0)
     
     # last layer
     mac_fc(nodes[0], nodes[1], weights, 1)
@@ -264,14 +264,14 @@ def process_model_three_fc(nodes, img, weights, filters, biases, Ms):
     bias(nodes[0], biases[0])
     requantize_activations(nodes, 0, Ms[0], False)
     relu(nodes[0], False)
-    type_cast(nodes[0])
+    type_cast(nodes, 0)
 
     # intermediate layer
     mac_fc(nodes[0], nodes[1], weights, 1)
     bias(nodes[1], biases[1])
     requantize_activations(nodes, 1, Ms[1], False)
     relu(nodes[1], False)
-    type_cast(nodes[1])
+    type_cast(nodes, 1)
     
     # last layer
     mac_fc(nodes[1], nodes[2], weights, 2)
@@ -330,20 +330,9 @@ def process_model_basic_conv(nodes, img, weights, filters, biases, Ms):
     # layer 2
     conv(nodes[1], nodes, filters, 2, (13, 13, 16), 1)
     bias_conv(nodes[2], biases[1])
-    print(np.max(nodes[2]))
-    print(np.min(nodes[2]))
-
-    print(Ms[1])
-    
     requantize_activations(nodes, 2, Ms[1], True)
-    print(np.max(nodes[2]))
-    print(np.min(nodes[2]))
     relu(nodes[2], True)
     type_cast(nodes, 2)
-    print(np.max(nodes[2]))
-    print(np.min(nodes[2]))
-
-
 
     # layer 3: max-pool (2x2)
     max_pool(nodes, (11, 11, 16), (5, 5, 16), (2, 2), 3)
