@@ -26,7 +26,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // states COP control
     val idle :: start :: fc :: conv :: pool :: mem_r :: restart :: reset_memory :: next_layer :: layer_done :: read_output :: find_max :: save_max :: load_image :: write_bram :: clear_layer :: peek_bram :: set_offset :: Nil = Enum(18)
     // states FC layer
-    val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: Nil = Enum(12)
+    val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: fc_requantize :: fc_type_cast :: Nil = Enum(14)
     // states CONV layer
     val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: conv_addr_set :: conv_out_address_set :: conv_load_output :: Nil = Enum(13)
     // states POOL layer
@@ -68,13 +68,15 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val outAddr = RegInit(0.U(DATA_WIDTH.W))
     val layer = RegInit(0.U(8.W))    
 
-    val num_layers = 6
+    val num_layers = 2
     val layer_meta_a = Reg(Vec(num_layers, UInt(8.W)))          // layer activations
     val layer_meta_t = Reg(Vec(num_layers, UInt(8.W)))          // layer types
     val layer_meta_w = Reg(Vec(num_layers, UInt(32.W)))         // point to layer weight addresses
     val layer_meta_b = Reg(Vec(num_layers, UInt(32.W)))         // point to layer biases
     val layer_meta_s_i = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
     val layer_meta_s_o = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
+    val m = RegInit(2756637.U(DATA_WIDTH.W))
+    val tmp64 = Reg(Vec(BURST_LENGTH, SInt(64.W)))
 
     // conv and pool registers
     val filter3x3 = Reg(Vec(9, SInt(DATA_WIDTH.W)))
@@ -106,7 +108,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val outCount = RegInit(0.U(DATA_WIDTH.W))
 
 /* ================================================= CONSTANTS ============================================= */ 
-
+/*
     // address constants
     layer_meta_t(0) := conv
     layer_meta_t(1) := pool
@@ -149,6 +151,25 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     layer_meta_s_o(3) := 400.U
     layer_meta_s_o(4) := 64.U
     layer_meta_s_o(5) := 12.U
+*/
+    // address constants
+    layer_meta_t(0) := fc
+    layer_meta_t(1) := fc
+
+    layer_meta_a(0) := fc_requantize
+    layer_meta_a(1) := fc_write_bias
+
+    layer_meta_w(0) := 1000000.U
+    layer_meta_w(1) := 1100000.U
+
+    layer_meta_b(0) := 1500000.U
+    layer_meta_b(1) := 1501000.U
+
+    layer_meta_s_i(0) := 784.U                                                      // flattened input length for FC layer
+    layer_meta_s_i(1) := 100.U                                                       // flattened input length for FC layer
+
+    layer_meta_s_o(0) := 100.U
+    layer_meta_s_o(1) := 12.U
 
 /* ============================================== CMD HANDLING ============================================ */ 
 
@@ -591,26 +612,62 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             relu(3) := bs(3) + outs(3)
 
             bram_count_reg := 0.U
-
+        }
+        is(fc_requantize) {
+            fcState := fc_apply_relu
+            tmp64(0) := (relu(0) * m.asSInt) >> 32.U
+            tmp64(1) := (relu(1) * m.asSInt) >> 32.U
+            tmp64(2) := (relu(2) * m.asSInt) >> 32.U
+            tmp64(3) := (relu(3) * m.asSInt) >> 32.U
         }
         is(fc_apply_relu) {
             /*
             finish relu activation by setting negative nodes equal to 0
             */
-            when (relu(0) < 0.S) {
+            when (tmp64(0)(31, 0).asSInt < 0.S) {
                 relu(0) := 0.S
             }
-            when (relu(1) < 0.S) {
-                relu(1) := 0.S
+            .elsewhen(tmp64(0)(31, 0).asSInt > 255.S) {
+                relu(0) := 255.S
             }
-            when (relu(2) < 0.S) {
-                relu(2) := 0.S
-            }
-            when (relu(3) < 0.S) {
-                relu(3) := 0.S
+            .otherwise {
+                relu(0) := tmp64(0)(31, 0).asSInt
             }
 
-            fcState := fc_write_bias                                // get ready to write back outputs
+            when (tmp64(1)(31, 0).asSInt < 0.S) {
+                relu(1) := 0.S
+            }
+            .elsewhen(tmp64(1)(31, 0).asSInt > 255.S) {
+                relu(1) := 255.S
+            }
+            .otherwise {
+                relu(1) := tmp64(1)(31, 0).asSInt
+            }
+
+            when (tmp64(2)(31, 0).asSInt < 0.S) {
+                relu(2) := 0.S
+            }
+            .elsewhen(tmp64(2)(31, 0).asSInt > 255.S) {
+                relu(2) := 255.S
+            }
+            .otherwise {
+                relu(2) := tmp64(2)(31, 0).asSInt
+            }
+
+            when (tmp64(3)(31, 0).asSInt < 0.S) {
+                relu(3) := 0.S
+            }
+            .elsewhen(tmp64(3)(31, 0).asSInt > 255.S) {
+                relu(3) := 255.S
+            }
+            .otherwise {
+                relu(3) := tmp64(3)(31, 0).asSInt
+            }
+
+            fcState := fc_type_cast                                // get ready to write back outputs
+        }
+        is(fc_type_cast) {
+            fcState := fc_write_bias
         }
         is(fc_write_bias) {
             /*

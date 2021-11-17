@@ -8,6 +8,7 @@ network_path = "../models/8x32_model_qat.tflite"
 param_fname = "parameters"
 image_fname = "images"
 param_path = "../../model_parameters/"
+N = 32
 
 def parse_conv_weights(weights, name, padding=0):
     c_out, dim_x, dim_y, c_in = weights.shape
@@ -64,6 +65,14 @@ def parse_example_img(idx, images, labels):
     out = out[:-3] + "\n" + footer
     return out, label
 
+def parse_ms(Ms):
+    out = "const int32_t ms[" + str(len(Ms)) + "] = {\n\t"
+    for M in Ms:
+        M0 = int(M/2**(-N))
+        out += str(M0) + ",\n\t"
+    out = out[:-3] + "\n" + footer
+    return out
+
 def extract_layer_parameters(layers):
     out = header
 
@@ -104,7 +113,7 @@ def extract_layer_parameters_qat(layers):
     for i in range(len(bias_s) - 1):
         Ms.append(bias_s[i] / activation_s[i])
 
-    print(Ms)
+    out += parse_ms(Ms)
 
     return out
 

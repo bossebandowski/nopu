@@ -10,6 +10,7 @@
 
 void load_nn()
 {
+    /*
     // set fixed address pointers (starting indices of arrays)
     int *w0p = (int *)1000000;
     int *w1p = (int *)1100000;
@@ -30,6 +31,17 @@ void load_nn()
     memcpy(b1p, param_3_b, sizeof(param_3_b));
     memcpy(b2p, param_4_b, sizeof(param_4_b));
     memcpy(b3p, param_5_b, sizeof(param_5_b));
+    */
+    int *w0p = (int *)1000000;
+    int *w1p = (int *)1100000;
+    int *b0p = (int *)1500000;
+    int *b1p = (int *)1501000;
+
+    memcpy(w0p, param_6_w_fc, sizeof(param_6_w_fc));
+    memcpy(w1p, param_8_w_fc, sizeof(param_8_w_fc));
+    memcpy(b0p, param_3_b, sizeof(param_3_b));
+    memcpy(b1p, param_4_b, sizeof(param_4_b));
+
 }
 
 void load_img(const int32_t img[], int size)
