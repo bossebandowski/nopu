@@ -224,7 +224,6 @@ def bias(outputs, biases):
         outputs[id] = outputs[id] + biases[id]
 
 def requantize_activations(outputs, layer, M, conv):
-    print(M)
     if conv:
         output_q = np.zeros(outputs[layer].shape)
         for channel in range(len(M)):

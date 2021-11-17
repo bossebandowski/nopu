@@ -10,16 +10,20 @@
 
 void load_nn()
 {
-    /*
     // set fixed address pointers (starting indices of arrays)
     int *w0p = (int *)1000000;
     int *w1p = (int *)1100000;
     int *w2p = (int *)1200000;
     int *w3p = (int *)1300000;
+
     int *b0p = (int *)1500000;
     int *b1p = (int *)1501000;
     int *b2p = (int *)1502000;
     int *b3p = (int *)1503000;
+
+    int *m0p = (int *)1600000;
+    int *m1p = (int *)1601000;
+    int *m2p = (int *)1602000;
 
     // copy arrays to target memory space
     memcpy(w0p, param_7_w_conv, sizeof(param_7_w_conv));
@@ -31,16 +35,10 @@ void load_nn()
     memcpy(b1p, param_3_b, sizeof(param_3_b));
     memcpy(b2p, param_4_b, sizeof(param_4_b));
     memcpy(b3p, param_5_b, sizeof(param_5_b));
-    */
-    int *w0p = (int *)1000000;
-    int *w1p = (int *)1100000;
-    int *b0p = (int *)1500000;
-    int *b1p = (int *)1501000;
 
-    memcpy(w0p, param_6_w_fc, sizeof(param_6_w_fc));
-    memcpy(w1p, param_8_w_fc, sizeof(param_8_w_fc));
-    memcpy(b0p, param_3_b, sizeof(param_3_b));
-    memcpy(b1p, param_4_b, sizeof(param_4_b));
+    memcpy(m0p, ms_0, sizeof(ms_0));
+    memcpy(m1p, ms_1, sizeof(ms_1));
+    memcpy(m2p, ms_2, sizeof(ms_2));
 
 }
 

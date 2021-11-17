@@ -26,9 +26,9 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // states COP control
     val idle :: start :: fc :: conv :: pool :: mem_r :: restart :: reset_memory :: next_layer :: layer_done :: read_output :: find_max :: save_max :: load_image :: write_bram :: clear_layer :: peek_bram :: set_offset :: Nil = Enum(18)
     // states FC layer
-    val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: fc_requantize :: fc_type_cast :: Nil = Enum(14)
+    val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: fc_requantize :: fc_load_m :: Nil = Enum(14)
     // states CONV layer
-    val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: conv_addr_set :: conv_out_address_set :: conv_load_output :: Nil = Enum(13)
+    val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: conv_addr_set :: conv_out_address_set :: conv_load_output :: conv_load_m :: conv_requantize :: Nil = Enum(15)
     // states POOL layer
     val pool_idle :: pool_done :: pool_init :: pool_in_addr_set :: pool_find_max :: pool_write_output :: Nil = Enum(6)
     // states SRAM control
@@ -68,14 +68,17 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val outAddr = RegInit(0.U(DATA_WIDTH.W))
     val layer = RegInit(0.U(8.W))    
 
-    val num_layers = 2
+    val num_layers = 6
     val layer_meta_a = Reg(Vec(num_layers, UInt(8.W)))          // layer activations
     val layer_meta_t = Reg(Vec(num_layers, UInt(8.W)))          // layer types
     val layer_meta_w = Reg(Vec(num_layers, UInt(32.W)))         // point to layer weight addresses
     val layer_meta_b = Reg(Vec(num_layers, UInt(32.W)))         // point to layer biases
     val layer_meta_s_i = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
     val layer_meta_s_o = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
-    val m = RegInit(2756637.U(DATA_WIDTH.W))
+    val layer_meta_m = Reg(Vec(num_layers, UInt(32.W)))
+    
+    // requantization regs
+    val ms = Reg(Vec(16, UInt(32.W)))
     val tmp64 = Reg(Vec(BURST_LENGTH, SInt(64.W)))
 
     // conv and pool registers
@@ -108,8 +111,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val outCount = RegInit(0.U(DATA_WIDTH.W))
 
 /* ================================================= CONSTANTS ============================================= */ 
-/*
-    // address constants
+
+    // network config
     layer_meta_t(0) := conv
     layer_meta_t(1) := pool
     layer_meta_t(2) := conv
@@ -117,11 +120,11 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     layer_meta_t(4) := fc
     layer_meta_t(5) := fc
 
-    layer_meta_a(0) := conv_apply_relu
+    layer_meta_a(0) := 0.U
     layer_meta_a(1) := 0.U
-    layer_meta_a(2) := conv_apply_relu
+    layer_meta_a(2) := 0.U
     layer_meta_a(3) := 0.U
-    layer_meta_a(4) := fc_apply_relu
+    layer_meta_a(4) := fc_requantize
     layer_meta_a(5) := fc_write_bias
 
     layer_meta_w(0) := 1000000.U
@@ -151,25 +154,13 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     layer_meta_s_o(3) := 400.U
     layer_meta_s_o(4) := 64.U
     layer_meta_s_o(5) := 12.U
-*/
-    // address constants
-    layer_meta_t(0) := fc
-    layer_meta_t(1) := fc
 
-    layer_meta_a(0) := fc_requantize
-    layer_meta_a(1) := fc_write_bias
-
-    layer_meta_w(0) := 1000000.U
-    layer_meta_w(1) := 1100000.U
-
-    layer_meta_b(0) := 1500000.U
-    layer_meta_b(1) := 1501000.U
-
-    layer_meta_s_i(0) := 784.U                                                      // flattened input length for FC layer
-    layer_meta_s_i(1) := 100.U                                                       // flattened input length for FC layer
-
-    layer_meta_s_o(0) := 100.U
-    layer_meta_s_o(1) := 12.U
+    layer_meta_m(0) := 1600000.U
+    layer_meta_m(1) := 0.U
+    layer_meta_m(2) := 1601000.U
+    layer_meta_m(3) := 0.U
+    layer_meta_m(4) := 1602000.U
+    layer_meta_m(5) := 0.U
 
 /* ============================================== CMD HANDLING ============================================ */ 
 
@@ -328,13 +319,14 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         is(conv) {
             when(convState === conv_done) {
 
-
                 stateReg := set_offset
                 convState := conv_idle
             }
         }
         is(pool) {
             when(poolState === pool_done) {
+
+
                 stateReg := set_offset
                 poolState := pool_idle
             }
@@ -451,20 +443,33 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             inCount := 0.U                                      // reset input count
             outCount := 0.U                                     // reset output count
             outputUsage := fc_mac                               // tell the load_output state where to transition next (mac or bias_add loop)
-            fcState := fc_load_input
+            fcState := fc_load_m
             maxIn := layer_meta_s_i(layer) - 1.U                // in input layer, we increment by 1
             maxOut := layer_meta_s_o(layer) - 4.U               // in output layer, we increment by 4
             bram_count_reg := 0.U
 
+
             when (layer(0) === 0.U) {                           // even layers
                 outAddr := layer_offset
                 inAddr := 0.U
-                bram.io.rdAddr := 0.U
             }
             .otherwise {                                        // odd layers
                 outAddr := 0.U
                 inAddr := layer_offset
-                bram.io.rdAddr := layer_offset
+            }
+        }
+        is(fc_load_m) {
+
+            when (memState === memIdle) {                   // wait until memory is ready                   
+                addrReg := layer_meta_m(layer)              // load current weight address
+                memState := memReadReq                      // force memory into read request state
+            }
+
+            when (memState === memDone) {                   // wait until transaction is finished
+                memState := memIdle                         // mark memory as idle
+                fcState := fc_load_input                    // load outputs next
+                ms(0) := mem_r_buffer(0)   
+                bram.io.rdAddr := inAddr
             }
         }
         is(fc_load_input) {
@@ -615,10 +620,10 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
         is(fc_requantize) {
             fcState := fc_apply_relu
-            tmp64(0) := (relu(0) * m.asSInt) >> 32.U
-            tmp64(1) := (relu(1) * m.asSInt) >> 32.U
-            tmp64(2) := (relu(2) * m.asSInt) >> 32.U
-            tmp64(3) := (relu(3) * m.asSInt) >> 32.U
+            tmp64(0) := (relu(0) * ms(0).asSInt) >> 32.U
+            tmp64(1) := (relu(1) * ms(0).asSInt) >> 32.U
+            tmp64(2) := (relu(2) * ms(0).asSInt) >> 32.U
+            tmp64(3) := (relu(3) * ms(0).asSInt) >> 32.U
         }
         is(fc_apply_relu) {
             /*
@@ -664,10 +669,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 relu(3) := tmp64(3)(31, 0).asSInt
             }
 
-            fcState := fc_type_cast                                // get ready to write back outputs
-        }
-        is(fc_type_cast) {
-            fcState := fc_write_bias
+            fcState := fc_write_bias                                // get ready to write back outputs
         }
         is(fc_write_bias) {
             /*
@@ -712,7 +714,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             filter_size := layer_meta_s_i(layer)(23, 16).asSInt
             input_depth := layer_meta_s_i(layer)(15, 8)
             output_depth := layer_meta_s_i(layer)(7, 0)
-
+            addrReg := layer_meta_m(layer)
             inCount := 0.U                                      // reset input count
             outCount := 0.U                                     // reset output count
             x := 1.S
@@ -721,7 +723,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             dx := -1.S
             dy := -1.S
 
-            convState := conv_load_bias
+            convState := conv_load_m
 
             when (layer(0) === 0.U) {                           // even layers
                 outAddr := layer_offset
@@ -730,6 +732,30 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             .otherwise {                                        // odd layers
                 outAddr := 0.U
                 conv_addr := layer_offset.asSInt + (w + 1.S) * input_depth
+            }
+        }
+
+        is(conv_load_m) {
+            when (memState === memIdle) {                       // wait until memory is ready
+                memState := memReadReq                          // force memory into read request state
+            }
+
+            when (memState === memDone) {                       // wait until transaction is finished
+                memState := memIdle                             // mark memory as idle
+                ms(inCount + 0.U) := mem_r_buffer(0)
+                ms(inCount + 1.U) := mem_r_buffer(1)
+                ms(inCount + 2.U) := mem_r_buffer(2)
+                ms(inCount + 3.U) := mem_r_buffer(3)
+
+                when (inCount < output_depth - 4.U) {
+                    addrReg := addrReg + 16.U
+                    inCount := inCount + 4.U                    
+                    convState := conv_load_m
+                }
+                .otherwise {
+                    inCount := 0.U
+                    convState := conv_load_bias
+                }
             }
         }
         is(conv_load_bias) {
@@ -816,11 +842,22 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
         is(conv_add_bias) {
             outs(0) := bs(0) + outs(0)
+            convState := conv_requantize
+        }
+
+        is(conv_requantize) {
+            tmp64(0) := (outs(0) * ms(inCount).asSInt) >> 32.U
             convState := conv_apply_relu
         }
         is(conv_apply_relu) {
-            when (outs(0) < 0.S) {
+            when (tmp64(0)(31, 0).asSInt < 0.S) {
                 outs(0) := 0.S
+            }
+            .elsewhen (tmp64(0)(31, 0).asSInt > 255.S) {
+                outs(0) := 255.S
+            }
+            .otherwise {
+                outs(0) := tmp64(0)(31, 0).asSInt
             }
             convState := conv_write_output
         }
