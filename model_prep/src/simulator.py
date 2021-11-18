@@ -9,6 +9,7 @@ import models
 # 3rd party
 import tensorflow as tf
 import numpy as np
+import data_loader
 
 # constants
 MODELS = models.DESCRIPTOR_LIST
@@ -105,11 +106,13 @@ def init_nodes(bas, layers):
 
     return nodes
 
-def load_input(id):
-    mnist = tf.keras.datasets.mnist
-    (_, _), (test_images, test_labels) = mnist.load_data()
+def load_input(id, dataset):
+    if dataset == "mnist":
+        (_, _), (test_images, test_labels) = data_loader.load_mnist()
+    elif dataset == "cifar":
+        (_, _), (test_images, test_labels) = data_loader.load_cifar10()
 
-    return test_images[id].reshape(28, 28, 1), test_labels[id]
+    return test_images[id], test_labels[id]
 
 def load_weights(fcs, layers):
     weights = []
@@ -353,6 +356,43 @@ def process_model_basic_conv(nodes, img, weights, filters, biases, Ms):
 
     return np.argmax(nodes[-1])
 
+def process_model_cifar(nodes, img, weights, filters, biases, Ms):
+    # layer 0
+    conv(img, nodes, filters, 0, (32, 32, 3), 0)
+    bias_conv(nodes[0], biases[0])
+    requantize_activations(nodes, 0, Ms[0], True)
+    relu(nodes[0], True)
+    type_cast(nodes, 0)
+
+    # layer 1: max-pool (2x2)
+    max_pool(nodes, (30, 30, 16), (15, 15, 16), (2, 2), 1)
+
+    # layer 2
+    conv(nodes[1], nodes, filters, 2, (15, 15, 16), 1)
+    bias_conv(nodes[2], biases[1])
+    requantize_activations(nodes, 2, Ms[1], True)
+    relu(nodes[2], True)
+    type_cast(nodes, 2)
+
+    # layer 3: max-pool (2x2)
+    max_pool(nodes, (13, 13, 16), (6, 6, 16), (2, 2), 3)
+
+    # flatten
+    flatten(nodes, 3)
+
+    # layer 4
+    mac_fc(nodes[3], nodes[4], weights, 0)
+    bias(nodes[4], biases[2])
+    requantize_activations(nodes, 4, Ms[2], False)
+    relu(nodes[4], False)
+    type_cast(nodes, 4)
+
+    # layer 5
+    mac_fc(nodes[4], nodes[5], weights, 1)
+    bias(nodes[5], biases[3])
+
+    return np.argmax(nodes[-1])
+
 def print_nodes(nodes, layer, num_nodes, offset):
     if len(nodes[layer].shape) > 1:
         flatten(nodes, layer)
@@ -376,7 +416,7 @@ if __name__ == "__main__":
     fcs, bas, convs = get_layer_ids(layers)
     Ms = find_ms(layers)
     nodes = init_nodes(bas, layers)
-    img, label = load_input(args["image"])
+    img, label = load_input(args["image"], "cifar")
     weights = load_weights(fcs, layers)
     biases = load_biases(bas, layers)
     filters = load_filters(convs, layers)
@@ -391,6 +431,8 @@ if __name__ == "__main__":
         process = process_model_conv_minimal
     elif args["type"] == "min_pool":
         process = process_model_min_pool
+    elif args["type"] == "cifar":
+        process = process_model_cifar
     else:
         print("unknown model architecture descriptor. Exiting...")
         sys.exit(0)
@@ -410,7 +452,7 @@ if __name__ == "__main__":
         num = 10
 
         for i in range(num):
-            inp, label = load_input(i)
+            inp, label = load_input(i, "cifar")
             nodes = init_nodes(bas, layers)
             res = process(nodes, inp, weights, filters, biases, Ms)
 

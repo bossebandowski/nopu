@@ -97,7 +97,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val output_depth = RegInit(0.U(8.W))
     val stride_length = RegInit(0.S(8.W))
 
-    val img_chunk_size = 784.U
+    val img_chunk_size = 3072.U
     val abs_min = -2147483646
 
     // fc registers
@@ -141,17 +141,17 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     layer_meta_b(4) := 1502000.U
     layer_meta_b(5) := 1503000.U
 
-    layer_meta_s_i(0) := Cat(28.U(8.W), 3.U(8.W), 1.U(8.W), 16.U(8.W))              // 2d width, filter width, input depth, output depth
-    layer_meta_s_i(1) := Cat(26.U(8.W), 2.U(4.W), 2.U(4.W), 13.U(8.W), 16.U(8.W))   // 2d width, pool width, stride length, output width, output depth
-    layer_meta_s_i(2) := Cat(13.U(8.W), 3.U(8.W), 16.U(8.W), 16.U(8.W))             // 2d width, filter width, input depth, output depth
-    layer_meta_s_i(3) := Cat(11.U(8.W), 2.U(4.W), 2.U(4.W), 5.U(8.W), 16.U(8.W))    // 2d width, pool width, stride length, output width, output depth
-    layer_meta_s_i(4) := 400.U                                                      // flattened input length for FC layer
+    layer_meta_s_i(0) := Cat(32.U(8.W), 3.U(8.W), 3.U(8.W), 16.U(8.W))              // 2d width, filter width, input depth, output depth
+    layer_meta_s_i(1) := Cat(30.U(8.W), 2.U(4.W), 2.U(4.W), 15.U(8.W), 16.U(8.W))   // 2d width, pool width, stride length, output width, output depth
+    layer_meta_s_i(2) := Cat(15.U(8.W), 3.U(8.W), 16.U(8.W), 16.U(8.W))             // 2d width, filter width, input depth, output depth
+    layer_meta_s_i(3) := Cat(13.U(8.W), 2.U(4.W), 2.U(4.W), 6.U(8.W), 16.U(8.W))    // 2d width, pool width, stride length, output width, output depth
+    layer_meta_s_i(4) := 576.U                                                      // flattened input length for FC layer
     layer_meta_s_i(5) := 64.U                                                       // flattened input length for FC layer
 
-    layer_meta_s_o(0) := 10816.U
-    layer_meta_s_o(1) := 2704.U
-    layer_meta_s_o(2) := 1936.U
-    layer_meta_s_o(3) := 400.U
+    layer_meta_s_o(0) := 14400.U
+    layer_meta_s_o(1) := 3600.U
+    layer_meta_s_o(2) := 2704.U
+    layer_meta_s_o(3) := 576.U
     layer_meta_s_o(4) := 64.U
     layer_meta_s_o(5) := 12.U
 
@@ -318,15 +318,12 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
         is(conv) {
             when(convState === conv_done) {
-
                 stateReg := set_offset
                 convState := conv_idle
             }
         }
         is(pool) {
             when(poolState === pool_done) {
-
-
                 stateReg := set_offset
                 poolState := pool_idle
             }

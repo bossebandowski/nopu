@@ -1,13 +1,15 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.keras.layers import Lambda
+import os
 
 header = "#include <stdint.h>\n\n"
 footer = "};\n"
 network_path = "../models/8x32_model_qat.tflite"
-param_fname = "parameters"
-image_fname = "images"
 param_path = "../../model_parameters/"
+param_fname = "parameters"
+image_path = "../../hardware_test/"
+image_fname = "images"
 N = 32
 num_channels = 16
 
@@ -58,11 +60,15 @@ def parse_biases(biases, name):
 def parse_example_img(idx, images, labels):
     img = images[idx]
     label = labels[idx]
-    len_x, len_y = img.shape
-    out = "const int32_t " + "img_" + str(idx) + "[" + str(len_x * len_y) + "] = {\n\t"
+    if type(label) == np.ndarray:
+        label = label[0]
+
+    len_x, len_y, len_z = img.shape
+    out = "const int32_t " + "img_" + str(idx) + "[" + str(len_x * len_y * len_z) + "] = {\n\t"
     for x in range(len_x):
         for y in range(len_y):
-            out += str(img[x, y]) + ",\n\t"
+            for z in range(len_z):
+                out += str(img[x, y, z]) + ",\n\t"
     out = out[:-3] + "\n" + footer
     return out, label
 
@@ -117,25 +123,25 @@ def extract_layer_parameters_qat(layers):
     return out
 
 def save_example_images(count):
-    mnist = tf.keras.datasets.mnist
-    (_, _), (test_images, test_labels) = mnist.load_data()
+    cifar = tf.keras.datasets.cifar10
+    (_, _), (test_images, test_labels) = cifar.load_data()
 
     image_file_content = header
-    result_arr = "const int results[" + str(count) + "] = {\n"
-    collection_arr = "const int32_t* images[" + str(count) + "] = {\n"
+    result_arr = "const int results[" + str(count) + "] = {\n\t"
+    collection_arr = "const int32_t* images[" + str(count) + "] = {\n\t"
     
     for i in range(count):
         content, label = parse_example_img(i, test_images, test_labels)
         image_file_content += content
         result_arr += str(label) + ", "
-        collection_arr += "img_" + str(i) + ",\n"
+        collection_arr += "img_" + str(i) + ",\n\t"
 
-    result_arr = result_arr[:-2] + footer
-    collection_arr = collection_arr[:-2] + footer
+    result_arr = result_arr[:-3] + "\n" + footer
+    collection_arr = collection_arr[:-3] + "\n" + footer
 
     image_file_content += result_arr + collection_arr
 
-    with open("../tmp/" + image_fname + ".h", "w") as f:
+    with open(os.path.join(image_path, image_fname + ".h"), "w") as f:
         f.write(image_file_content)
 
 def main():
@@ -152,7 +158,7 @@ def main():
     with open(param_path + param_fname + ".h", "w") as f:
         f.write(param_file_content)
 
-    # save_example_images(10)
+    save_example_images(10)
 
 if __name__ == "__main__":
     main()

@@ -27,6 +27,7 @@ import numpy as np
 MODEL_SAVE_PATH = "../models/mnist_model.pt"
 QUANT_MODEL_SAVE_PATH = "../models/"
 MODELS = models.DESCRIPTOR_LIST
+DATASETS = data_loader.DATASETS
 
 """
 ============================================================================================
@@ -91,6 +92,13 @@ def parse_args():
         type=str,
         default="basic_conv",
         help="specify which model to train. Choose between " + str(MODELS),
+    )
+    parser.add_argument(
+        "-ds",
+        "--dataset",
+        type=str,
+        default="mnist",
+        help="specify which model to train. 'mnist' or 'cifar'. Make sure it matches the model input layer",
     )
     parser.add_argument("--qat", action="store_true", help="retrain qat model. Requires --train flag")
     parser.add_argument("--ptq", action="store_true", help="apply post training quantization (both 32 and 16 bit activations)")
@@ -193,6 +201,10 @@ def evaluate_model(model_type, test_set, path):
     test_image_indices = range(test_images.shape[0])
     predictions = run_tflite_model(path, test_image_indices, test_set)
 
+
+    if len(test_labels.shape) > 1:
+        test_labels = test_labels.flatten()
+
     accuracy = (np.sum(test_labels == predictions) * 100) / len(test_images)
 
     print(
@@ -200,11 +212,22 @@ def evaluate_model(model_type, test_set, path):
         % (model_type, accuracy, len(test_images))
     )
 
+def load_data(dataset, dl):
+    if dataset == "mnist":
+        (train_images, train_labels), (test_images, test_labels) =  dl.load_mnist()
+    elif dataset == "cifar":
+        (train_images, train_labels), (test_images, test_labels) =  dl.load_cifar10()
+
+    train_images, test_images = train_images / 255.0, test_images / 255.0
+    
+    return (train_images, train_labels), (test_images, test_labels)
+
 
 if __name__ == "__main__":
     args = parse_args()
+    assert(args["dataset"] in DATASETS)
     # load training data
-    train_set, test_set = data_loader.load_mnist()
+    train_set, test_set = load_data(args["dataset"], data_loader)
     test_images, test_labels = test_set
 
     if args["train"]:
@@ -225,6 +248,8 @@ if __name__ == "__main__":
     else:
         model = load_model()
         model.summary()
+        evaluate_model("saved qat model", test_set, os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model_qat.tflite"))
+
 
     if args["ptq"]:
         path32 = os.path.join(QUANT_MODEL_SAVE_PATH, "8x32_model.tflite")

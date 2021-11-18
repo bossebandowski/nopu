@@ -108,7 +108,7 @@ int main(int argc, char **argv)
 
     int res;
     int hwExecTime;
-    int size = 784*4;
+    int size = 3072*4;
 
     for (int id = 0; id < 10; id++) {
         // reset the count
