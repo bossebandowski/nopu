@@ -1,9 +1,17 @@
 # nopu
 
-## Release Notes v1.2
+## Release Notes v1.3
 
-- fixed overflow issues from previous releases
-- basic conv architecture working with MNIST in simulation and in hardware
+- moved from MNIST to CIFAR10 (`https://www.cs.toronto.edu/~kriz/cifar.html`)
+- image classification on small 3-channel input images. Input shape (32x32x3)
+- same model architecture as previously, but new input layer resulting in new FC sizes:
+    - 3x3x16 conv layer + relu
+    - 2x2x2 pool layer
+    - 3x3x16 conv layer + relu
+    - 2x2x2 pool layer
+    - 576x64 fc layer + relu
+    - 64x12 fc layer + softmax
+- the dataset is much more challenging, resulting in lower accuracy
 
 
 ## Setup and Run
@@ -24,36 +32,41 @@ follow the instructions on `https://github.com/t-crest/patmos`
 - **Test script output**
     ```
     Loading network...done
-    EXPECTED 7, RETURNED 7
-    EXPECTED 2, RETURNED 2
-    EXPECTED 1, RETURNED 1
+    EXPECTED 3, RETURNED 3
+    EXPECTED 8, RETURNED 1
+    EXPECTED 8, RETURNED 8
     EXPECTED 0, RETURNED 0
-    EXPECTED 4, RETURNED 4
-    EXPECTED 1, RETURNED 1
-    EXPECTED 4, RETURNED 4
-    EXPECTED 9, RETURNED 9
-    EXPECTED 5, RETURNED 5
-    EXPECTED 9, RETURNED 9
-    gross execution time per inference (including img load): 1769122
+    EXPECTED 6, RETURNED 4
+    EXPECTED 6, RETURNED 6
+    EXPECTED 1, RETURNED 3
+    EXPECTED 6, RETURNED 2
+    EXPECTED 3, RETURNED 3
+    EXPECTED 0, RETURNED 1
+    gross execution time per inference (including img load): 3328624
     ```
 - **Speed**
-    - clock cycles per inference: 1769122
+    - clock cycles per inference: 3328624
     - max frequency: 80 MHz
-    - inferences per second: 45.22
+    - inferences per second: 24.03
 
 - **Memory requirements**
 
     | component         | datapoints     | width [bit] | kB |
     |--------------|-----------|------------| --- |
     | image | 784      | 32        | 3.06
-    | layer 0 weights      | 78400  | 8       | 76.6
-    | layer 0 biases      | 100  | 32       | 0.391
-    | layer 1 weights      | 1000  | 8       | 0.977
-    | layer 1 biases      | 10  | 32       | 0.0391
-    | **sum** | | | **81.1**
+    | layer 0 weights      | 192  | 8       | 0.188
+    | layer 0 biases      | 16  | 32       | 0.0625
+    | layer 2 weights      | 3072  | 8       | 3
+    | layer 2 biases      | 16  | 32       | 0.0625
+    | layer 4 weights      | 25600  | 8       | 25
+    | layer 4 biases      | 64  | 32       | 0.25
+    | layer 5 weights      | 768  | 8       | 0.75
+    | layer 5 biases      | 12  | 32       | 0.0469
+    | Ms      | 36  | 32       | 1.13
+    | **sum** | | | **32.4**
 
 - **Accuracy**
-97.58%
+64%
 
 ## Synthesis Report
 
