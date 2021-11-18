@@ -50,19 +50,21 @@ follow the instructions on `https://github.com/t-crest/patmos`
 
 - **Memory requirements**
 
+    
     | component         | datapoints     | width [bit] | kB |
     |--------------|-----------|------------| --- |
-    | image | 784      | 32        | 24.5
-    | layer 0 weights      | 192  | 8       | 1.5
-    | layer 0 biases      | 16  | 32       | 0.5
-    | layer 2 weights      | 3072  | 8       | 24
-    | layer 2 biases      | 16  | 32       | 0.5
-    | layer 4 weights      | 25600  | 8       | 200
-    | layer 4 biases      | 64  | 32       | 2
-    | layer 5 weights      | 768  | 8       | 6
-    | layer 5 biases      | 12  | 32       | 0.375
+    | image | 784      | 32        | 3.06
+    | layer 0 weights      | 192  | 8       | 0.188
+    | layer 0 biases      | 16  | 32       | 0.0625
+    | layer 2 weights      | 3072  | 8       | 3
+    | layer 2 biases      | 16  | 32       | 0.0625
+    | layer 4 weights      | 25600  | 8       | 25
+    | layer 4 biases      | 64  | 32       | 0.25
+    | layer 5 weights      | 768  | 8       | 0.75
+    | layer 5 biases      | 12  | 32       | 0.0469
     | Ms      | 36  | 32       | 1.13
-    | **sum** | | | **260**
+    | **sum** | | | **32.4**
+
 
 - **Accuracy**
 95 - 99%
