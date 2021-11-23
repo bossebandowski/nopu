@@ -15,4 +15,5 @@ cp model_parameters/parameters.h $PATMOSPATH/c/
 
 # copy config
 cp hardware_config/altde2-115.xml $PATMOSPATH/hardware/config/
-cp hardware_config/build.sbt $PATMOSPATH/hardware
+cp hardware_config/build.sbt $PATMOSPATH/hardware/
+cp hardware_config/patmos.qsf $PATMOSPATH/hardware/quartus/altde2-115/
