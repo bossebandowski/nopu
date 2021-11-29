@@ -20,11 +20,11 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val FUNC_RUN              = "b00010".U(5.W)   // init inference
     val FUNC_GET_RES          = "b00100".U(5.W)   // read result register
 
-    val FUNC_MEM_W            = "b00011".U(5.W)   // TEST: write a value into memory
+    val FUNC_CONFIG           = "b00011".U(5.W)   // TEST: write a value into memory
     val FUNC_MEM_R            = "b00101".U(5.W)   // TEST: read a value from memory
 
     // states COP control
-    val idle :: start :: fc :: conv :: pool :: mem_r :: restart :: reset_memory :: next_layer :: layer_done :: read_output :: find_max :: save_max :: load_image :: write_bram :: clear_layer :: peek_bram :: set_offset :: Nil = Enum(18)
+    val idle :: start :: fc :: conv :: pool :: mem_r :: restart :: reset_memory :: next_layer :: layer_done :: read_output :: find_max :: save_max :: load_image :: write_bram :: clear_layer :: peek_bram :: set_offset :: config :: Nil = Enum(19)
     // states FC layer
     val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: fc_requantize :: fc_load_m :: Nil = Enum(14)
     // states CONV layer
@@ -68,14 +68,6 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val outAddr = RegInit(0.U(DATA_WIDTH.W))
     val layer = RegInit(0.U(8.W))    
 
-    val num_layers = 6
-    val layer_meta_a = Reg(Vec(num_layers, UInt(8.W)))          // layer activations
-    val layer_meta_t = Reg(Vec(num_layers, UInt(8.W)))          // layer types
-    val layer_meta_w = Reg(Vec(num_layers, UInt(32.W)))         // point to layer weight addresses
-    val layer_meta_b = Reg(Vec(num_layers, UInt(32.W)))         // point to layer biases
-    val layer_meta_s_i = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
-    val layer_meta_s_o = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
-    val layer_meta_m = Reg(Vec(num_layers, UInt(32.W)))
     
     // requantization regs
     val ms = Reg(Vec(16, UInt(32.W)))
@@ -111,6 +103,15 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val outCount = RegInit(0.U(DATA_WIDTH.W))
 
 /* ================================================= CONSTANTS ============================================= */ 
+
+    val num_layers = 6
+    val layer_meta_a = Reg(Vec(num_layers, UInt(8.W)))          // layer activations
+    val layer_meta_t = Reg(Vec(num_layers, UInt(8.W)))          // layer types
+    val layer_meta_w = Reg(Vec(num_layers, UInt(32.W)))         // point to layer weight addresses
+    val layer_meta_b = Reg(Vec(num_layers, UInt(32.W)))         // point to layer biases
+    val layer_meta_s_i = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
+    val layer_meta_s_o = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
+    val layer_meta_m = Reg(Vec(num_layers, UInt(32.W)))
 
     // network config
     layer_meta_t(0) := conv
@@ -198,6 +199,14 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                         stateReg := start
                     }
                 }
+                is(FUNC_CONFIG) {
+                    when(isIdle) {
+                        layer := io.copIn.opData(0)(15, 8)
+                        inCount := io.copIn.opData(0)(7, 0)
+                        outCount := io.copIn.opData(1)
+                        stateReg := config
+                    }
+                }
                 is(FUNC_MEM_R) {
                     when(isIdle) {
                         bram.io.rdAddr := io.copIn.opData(0)
@@ -215,6 +224,14 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             /*
             Don't do anything until asked to
             */
+        }
+        is(config) {
+            stateReg := idle
+            switch(inCount) {
+                is(0.U) {
+                    resReg := outCount
+                }
+            }
         }
         is(start) {
             /*

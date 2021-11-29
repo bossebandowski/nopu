@@ -62,6 +62,26 @@ void cop_mem_w(int addr, int val)
     cop_busy_wait();
 }
 
+void cop_config(uint8_t layer, uint8_t config_id, int32_t val) {
+    int32_t addr = layer << 8 | config_id;
+    printf("%x\n", layer);
+    printf("%x\n", config_id);
+    printf("%x\n", addr);
+
+    register uint32_t addrReg __asm__("16") = addr;
+    register uint32_t valReg __asm__("17") = val;
+
+    asm(".word 0x3470881"
+        :
+        : "r"(addrReg), "r"(valReg));
+
+    // pref     01101
+    // func     00011
+    // regA     10000
+    // regB     10001
+    // post     0000001
+}
+
 void cop_mem_r(int addr)
 {
     register uint32_t addrReg __asm__("16") = addr;
