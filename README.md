@@ -1,14 +1,10 @@
 # nopu
 
-## Release Notes v1.3
+## Release Notes v1.4
 
-- moved from MNIST to CIFAR10 (`https://www.cs.toronto.edu/~kriz/cifar.html`)
-- image classification on small 3-channel input images. Input shape (32x32x3)
-- same model architecture as previously, but new input layer resulting in new FC sizes:
-    - 576x64 fc layer + relu
-    - 64x12 fc layer + softmax
-- the dataset is much more challenging, resulting in lower accuracy
-- most of the clock cycles are used on image transfers, this needs to be more efficient but will be visited when implementing IO stuff
+- Still cifar10 dataset (image classification on small 3-channel input images. Input shape (32x32x3))
+- model architecture has not changed
+- model parameters are no longer copied to predetermined locations in SRAM, but rather the pointers are transferred to the accelerator on the fly
 
 ## Setup and Run
 
@@ -27,23 +23,24 @@ follow the instructions on `https://github.com/t-crest/patmos`
 
 - **Test script output**
     ```
-    Loading network...done
     EXPECTED 3, RETURNED 3
-    EXPECTED 8, RETURNED 1
+    EXPECTED 8, RETURNED 8
     EXPECTED 8, RETURNED 8
     EXPECTED 0, RETURNED 0
     EXPECTED 6, RETURNED 4
     EXPECTED 6, RETURNED 6
-    EXPECTED 1, RETURNED 3
-    EXPECTED 6, RETURNED 2
+    EXPECTED 1, RETURNED 1
+    EXPECTED 6, RETURNED 6
     EXPECTED 3, RETURNED 3
     EXPECTED 0, RETURNED 1
-    gross execution time per inference (including img load): 3328624
+    ================================
+    gross execution time per inference (including img load): 3216974
+
     ```
 - **Speed**
-    - clock cycles per inference: 3328624
+    - clock cycles per inference: 3216974
     - max frequency: 80 MHz
-    - inferences per second: 24.03
+    - inferences per second: 24.87
 
 - **Memory requirements**
 
