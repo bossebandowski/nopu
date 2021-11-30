@@ -102,66 +102,18 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val inCount = RegInit(0.U(DATA_WIDTH.W))
     val outCount = RegInit(0.U(DATA_WIDTH.W))
 
-/* ================================================= CONSTANTS ============================================= */ 
+/* ================================================= NETWORK ============================================= */ 
 
-    val num_layers = 6
-    val layer_meta_a = Reg(Vec(num_layers, UInt(8.W)))          // layer activations
-    val layer_meta_t = Reg(Vec(num_layers, UInt(8.W)))          // layer types
-    val layer_meta_w = Reg(Vec(num_layers, UInt(32.W)))         // point to layer weight addresses
-    val layer_meta_b = Reg(Vec(num_layers, UInt(32.W)))         // point to layer biases
-    val layer_meta_s_i = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
-    val layer_meta_s_o = Reg(Vec(num_layers, UInt(32.W)))       // layer sizes (for fc: number of nodes)
-    val layer_meta_m = Reg(Vec(num_layers, UInt(32.W)))
-
-    // network config
-    layer_meta_t(0) := conv
-    layer_meta_t(1) := pool
-    layer_meta_t(2) := conv
-    layer_meta_t(3) := pool
-    layer_meta_t(4) := fc
-    layer_meta_t(5) := fc
-
-    layer_meta_a(0) := 0.U
-    layer_meta_a(1) := 0.U
-    layer_meta_a(2) := 0.U
-    layer_meta_a(3) := 0.U
-    layer_meta_a(4) := fc_requantize
-    layer_meta_a(5) := fc_write_bias
-
-    layer_meta_w(0) := 1000000.U
-    layer_meta_w(1) := 0.U
-    layer_meta_w(2) := 1100000.U
-    layer_meta_w(3) := 0.U
-    layer_meta_w(4) := 1200000.U
-    layer_meta_w(5) := 1300000.U
-
-    layer_meta_b(0) := 1500000.U
-    layer_meta_b(1) := 0.U
-    layer_meta_b(2) := 1501000.U
-    layer_meta_b(3) := 0.U
-    layer_meta_b(4) := 1502000.U
-    layer_meta_b(5) := 1503000.U
-
-    layer_meta_s_i(0) := Cat(32.U(8.W), 3.U(8.W), 3.U(8.W), 16.U(8.W))              // 2d width, filter width, input depth, output depth
-    layer_meta_s_i(1) := Cat(30.U(8.W), 2.U(4.W), 2.U(4.W), 15.U(8.W), 16.U(8.W))   // 2d width, pool width, stride length, output width, output depth
-    layer_meta_s_i(2) := Cat(15.U(8.W), 3.U(8.W), 16.U(8.W), 16.U(8.W))             // 2d width, filter width, input depth, output depth
-    layer_meta_s_i(3) := Cat(13.U(8.W), 2.U(4.W), 2.U(4.W), 6.U(8.W), 16.U(8.W))    // 2d width, pool width, stride length, output width, output depth
-    layer_meta_s_i(4) := 576.U                                                      // flattened input length for FC layer
-    layer_meta_s_i(5) := 64.U                                                       // flattened input length for FC layer
-
-    layer_meta_s_o(0) := 14400.U
-    layer_meta_s_o(1) := 3600.U
-    layer_meta_s_o(2) := 2704.U
-    layer_meta_s_o(3) := 576.U
-    layer_meta_s_o(4) := 64.U
-    layer_meta_s_o(5) := 12.U
-
-    layer_meta_m(0) := 1600000.U
-    layer_meta_m(1) := 0.U
-    layer_meta_m(2) := 1601000.U
-    layer_meta_m(3) := 0.U
-    layer_meta_m(4) := 1602000.U
-    layer_meta_m(5) := 0.U
+    val num_layers_max = 20
+    val num_layers = RegInit(20.U(DATA_WIDTH.W))
+    val image_address = RegInit(0.U(DATA_WIDTH.W))
+    val layer_meta_a = Reg(Vec(num_layers_max, UInt(8.W)))          // layer activations
+    val layer_meta_t = Reg(Vec(num_layers_max, UInt(8.W)))          // layer types
+    val layer_meta_w = Reg(Vec(num_layers_max, UInt(32.W)))         // point to layer weight addresses
+    val layer_meta_b = Reg(Vec(num_layers_max, UInt(32.W)))         // point to layer biases
+    val layer_meta_s_i = Reg(Vec(num_layers_max, UInt(32.W)))       // layer sizes (for fc: number of nodes)
+    val layer_meta_s_o = Reg(Vec(num_layers_max, UInt(32.W)))       // layer sizes (for fc: number of nodes)
+    val layer_meta_m = Reg(Vec(num_layers_max, UInt(32.W)))
 
 /* ============================================== CMD HANDLING ============================================ */ 
 
@@ -229,7 +181,31 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             stateReg := idle
             switch(inCount) {
                 is(0.U) {
-                    resReg := outCount
+                    layer_meta_t(layer) := outCount
+                }
+                is(1.U) {
+                    layer_meta_a(layer) := outCount
+                }
+                is(2.U) {
+                    layer_meta_w(layer) := outCount
+                }
+                is(3.U) {
+                    layer_meta_b(layer) := outCount
+                }
+                is(4.U) {
+                    layer_meta_s_i(layer) := outCount
+                }
+                is(5.U) {
+                    layer_meta_s_o(layer) := outCount
+                }
+                is(6.U) {
+                    layer_meta_m(layer) := outCount
+                }
+                is(7.U) {
+                    image_address := outCount
+                }
+                is(8.U) {
+                    num_layers := outCount
                 }
             }
         }
@@ -243,7 +219,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             inCount := 0.U
             bram_count_reg := 0.U
             stateReg := load_image                          // start inference by moving image to bram
-            inAddr := 40.U
+            inAddr := image_address
             outAddr := 0.U
         }
         is(load_image) {
@@ -292,7 +268,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(layer_done) {
-            when (layer === num_layers.U - 1.U) {   // when we have reached the last layer
+            when (layer === num_layers - 1.U) {   // when we have reached the last layer
                 stateReg := read_output             // get ready to extract max
                 curMax := abs_min.S                 // set curmax to low value
                 maxOut := 9.U                       // set number of output nodes (now only processing one at a time)

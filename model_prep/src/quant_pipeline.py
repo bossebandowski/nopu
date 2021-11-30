@@ -24,7 +24,7 @@ import tensorflow_model_optimization as tfmot
 import numpy as np
 
 # constants
-MODEL_SAVE_PATH = "../models/mnist_model.pt"
+MODEL_SAVE_PATH = "../models/model.pt"
 QUANT_MODEL_SAVE_PATH = "../models/"
 MODELS = models.DESCRIPTOR_LIST
 DATASETS = data_loader.DATASETS

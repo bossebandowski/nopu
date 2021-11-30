@@ -64,10 +64,6 @@ void cop_mem_w(int addr, int val)
 
 void cop_config(uint8_t layer, uint8_t config_id, int32_t val) {
     int32_t addr = layer << 8 | config_id;
-    printf("%x\n", layer);
-    printf("%x\n", config_id);
-    printf("%x\n", addr);
-
     register uint32_t addrReg __asm__("16") = addr;
     register uint32_t valReg __asm__("17") = val;
 
@@ -80,6 +76,8 @@ void cop_config(uint8_t layer, uint8_t config_id, int32_t val) {
     // regA     10000
     // regB     10001
     // post     0000001
+
+    cop_busy_wait();
 }
 
 void cop_mem_r(int addr)

@@ -23,7 +23,6 @@
     <IO DevTypeRef="Leds" offset="9"/>
     <IO DevTypeRef="Keys" offset="10" intrs="2,3,4,5"/>
     <IO DevTypeRef="Counter" offset="11"/>
-    <IO DevTypeRef="EthMac" offset="13" intrs="6"/>
   </IOs>
 
   <Devs>
@@ -50,16 +49,6 @@
       </params>
     </Dev>
     <Dev DevType="Counter" entity="Counter" iface="OcpBurst">
-    </Dev>
-    <Dev DevType="EthMac" entity="EthMac" iface="OcpCore">
-      <params>
-        <param name="extAddrWidth" value="14" />
-        <param name="dataWidth" value="32" />
-        <param name="withPTP" value="true" />
-        <param name="secondsWidth" value="32"/>
-        <param name="nanoWidth" value="32"/>
-        <param name="ppsDuration" value="1000"/>
-      </params>
     </Dev>
   </Devs>
 </patmos>

@@ -2,77 +2,161 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <counter.h>
 #include <cop.h>
 #include <parameters.h>
 #include <images.h>
 
-void load_nn()
-{
-    // set fixed address pointers (starting indices of arrays)
-    int *w0p = (int *)1000000;
-    int *w1p = (int *)1100000;
-    int *w2p = (int *)1200000;
-    int *w3p = (int *)1300000;
+#include <machine/patmos.h>
 
-    int *b0p = (int *)1500000;
-    int *b1p = (int *)1501000;
-    int *b2p = (int *)1502000;
-    int *b3p = (int *)1503000;
+#include "ethlib/icmp.h"
+#include "ethlib/icmp.h"
+#include "ethlib/arp.h"
+#include "ethlib/mac.h"
+#include "ethlib/udp.h"
+#include "ethlib/ipv4.h"
+#include "ethlib/eth_mac_driver.h"
 
-    int *m0p = (int *)1600000;
-    int *m1p = (int *)1601000;
-    int *m2p = (int *)1602000;
+unsigned int PCKG_SIZE = 1024;
+unsigned int UDP_PORT = 5005;
+unsigned int rx_addr = 0x000;
+unsigned int tx_addr = 0x800;
 
-    // copy arrays to target memory space
-    memcpy(w0p, param_7_w_conv, sizeof(param_7_w_conv));
-    memcpy(w1p, param_10_w_conv, sizeof(param_10_w_conv));
-    memcpy(w2p, param_14_w_fc, sizeof(param_14_w_fc));
-    memcpy(w3p, param_16_w_fc, sizeof(param_16_w_fc));
+const uint fc = 2;
+const uint conv = 3;
+const uint pool = 4;
+const uint fc_requantize = 12;
+const uint fc_write_bias = 11;
 
-    memcpy(b0p, param_2_b, sizeof(param_2_b));
-    memcpy(b1p, param_3_b, sizeof(param_3_b));
-    memcpy(b2p, param_4_b, sizeof(param_4_b));
-    memcpy(b3p, param_5_b, sizeof(param_5_b));
-
-    memcpy(m0p, ms_0, sizeof(ms_0));
-    memcpy(m1p, ms_1, sizeof(ms_1));
-    memcpy(m2p, ms_2, sizeof(ms_2));
-
+void print_general_info(){
+	printf("\nGeneral network info:\n");
+	printf("  MAC: ");
+	mac_print_my_mac();
+	printf("\n  IP: ");
+	ipv4_print_my_ip();
+	printf("\n  UDP port %d", UDP_PORT);
+    printf("\n");
+	return;
 }
 
-void load_img(const int32_t img[], int size)
-{
-    int *im_addr_0 = (int *)40;
-    memcpy(im_addr_0, img, size);
+int receive_img(){
+	enum eth_protocol packet_type;
+	unsigned char ans;
+	unsigned char udp_data[PCKG_SIZE];
+	unsigned char source_ip[4];	
+	unsigned char destination_ip[4];
+	unsigned short int destination_port;
+	eth_mac_initialize();
+	arp_table_init();
+    int32_t img[3072];
+    int i = 0;
+    int *img_addr_0 = (int *)40;
+
+	while (i<3){
+		eth_mac_receive(rx_addr, 0);
+		packet_type = mac_packet_type(rx_addr);
+		switch (packet_type) {
+		case UNSUPPORTED:
+		break;
+		case ICMP:
+			ans = icmp_process_received(rx_addr, tx_addr);
+		break;
+		case UDP:
+			ipv4_get_source_ip(rx_addr, source_ip);
+			ipv4_get_destination_ip(rx_addr, destination_ip);
+			udp_get_source_port(rx_addr);
+			udp_get_destination_port(rx_addr);
+			udp_get_checksum(rx_addr);
+
+			if(ipv4_verify_checksum(rx_addr) == 1 && udp_verify_checksum(rx_addr) == 1 && ipv4_compare_ip(my_ip, destination_ip) == 1){
+                printf("udp packet received\n");
+			    printf("  - Data length %d B\n", udp_get_data_length(rx_addr));
+				destination_port = udp_get_destination_port(rx_addr);
+				if(destination_port == UDP_PORT){
+                    udp_get_data(rx_addr, udp_data, udp_get_data_length(rx_addr));
+                    udp_data[udp_get_data_length(rx_addr)] = '\0';
+                    printf("  - The first pixel is: %u\n", udp_data[0]);
+                    for (int idx = 0; idx < PCKG_SIZE; idx++) {
+                        // memcpy(img_addr_0, udp_data, PCKG_SIZE * 4);
+                        img[i * PCKG_SIZE + idx] = udp_data[idx];
+                    }
+                    i++;
+				}else{
+					printf("Wrong port.\n");
+				}
+			}						
+		break;
+		case ARP:
+			ans = arp_process_received(rx_addr, tx_addr);
+		break;
+		default:
+			printf("ERROR!\n");
+		break;
+		}
+	}
+    
+	return &img[0];
 }
 
-void read_inputs()
+void load_nn_cifar_10()
 {
-    cop_mem_r(1000000);
-    printf("weight 0[0]:\t\t%lx\n", cop_get_res());
-    cop_mem_r(1000000 + 78399);
-    printf("weight 0[78399]:\t%lx\n", cop_get_res());
-    cop_mem_r(1320000);
-    printf("weight 1[0]:\t\t%lx\n", cop_get_res());
-    cop_mem_r(1320000 + 4);
-    printf("weight 1[1]:\t\t%lx\n", cop_get_res());
-    cop_mem_r(1320000 + 999);
-    printf("weight 1[999]:\t\t%lx\n", cop_get_res());
-    cop_mem_r(1325000);
-    printf("bias 0[0]:\t\t%lx\n", cop_get_res());
-    cop_mem_r(1326000);
-    printf("bias 1[0]:\t\t%lx\n", cop_get_res());
-    cop_mem_r(30);
-    printf("img [0]:\t\t%lx\n", cop_get_res());
+    cop_config(0, 8, 6);
+
+    cop_config(0, 0, conv);
+    cop_config(1, 0, pool);
+    cop_config(2, 0, conv);
+    cop_config(3, 0, pool);
+    cop_config(4, 0, fc);
+    cop_config(5, 0, fc);
+
+    cop_config(0, 1, 0);
+    cop_config(1, 1, 0);
+    cop_config(2, 1, 0);
+    cop_config(3, 1, 0);
+    cop_config(4, 1, fc_requantize);
+    cop_config(5, 1, fc_write_bias);
+
+    cop_config(0, 2, &param_7_w_conv);
+    cop_config(1, 2, 0);
+    cop_config(2, 2, &param_10_w_conv);
+    cop_config(3, 2, 0);
+    cop_config(4, 2, &param_14_w_fc);
+    cop_config(5, 2, &param_16_w_fc);
+
+    cop_config(0, 3, &param_2_b);
+    cop_config(1, 3, 0);
+    cop_config(2, 3, &param_3_b);
+    cop_config(3, 3, 0);
+    cop_config(4, 3, &param_4_b);
+    cop_config(5, 3, &param_5_b);
+
+    cop_config(0, 4, 0x20030310);
+    cop_config(1, 4, 0x1e220f10);
+    cop_config(2, 4, 0x0f031010);
+    cop_config(3, 4, 0x0d220610);
+    cop_config(4, 4, 576);
+    cop_config(5, 4, 64);
+
+    cop_config(0, 5, 14400);
+    cop_config(1, 5, 3600);
+    cop_config(2, 5, 2704);
+    cop_config(3, 5, 576);
+    cop_config(4, 5, 64);
+    cop_config(5, 5, 12);
+
+    cop_config(0, 6, &ms_0);
+    cop_config(1, 6, 0);
+    cop_config(2, 6, &ms_1);
+    cop_config(3, 6, 0);
+    cop_config(4, 6, &ms_2);
+    cop_config(5, 6, 0);
 }
 
-void read_weights() {
-    for (int i = 1000000; i < 1000020; i+=4) {
-        cop_mem_r(i);
-        printf("%d:\t\t%lx\n", i, cop_get_res());
-    }
+void load_img(int id)
+{
+    cop_config(0, 7, &images[id][0]);
 }
 
 void read_raw_outputs()
@@ -84,17 +168,23 @@ void read_raw_outputs()
     }
 }
 
-void print_intermediate_layer_head()
+void print_intermediate_layer_head(bool even, int offset, int count)
 {
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < count; i++)
     {
-        cop_mem_r(i + 16384);
-        printf("%d: %ld\n", i, cop_get_res());
+        if (even) {
+            cop_mem_r(i + 16384 + offset);
+        }
+        else {
+            cop_mem_r(i + offset);
+        }
+
+        printf("%d: %ld\n", i + offset, cop_get_res());
     }
 }
 
-int run_inf(const int32_t img[], int size) {
-    load_img(img, size);
+int run_inf(int id) {
+    load_img(id);
     cop_run();
     return cop_get_res();
 }
@@ -102,29 +192,18 @@ int run_inf(const int32_t img[], int size) {
 int main(int argc, char **argv)
 {
     // load nn parameters into desired memory space. In the future, this will hopefully be copying from flash to sram
-    printf("Loading network...");
-    load_nn();
-    printf("done\n");
-
     int res;
     int hwExecTime;
-    int size = 3072*4;
-
-    for (int id = 0; id < 10; id++) {
-        // reset the count
+    load_nn_cifar_10();
+    
+    for (int id = 0; id < 10; id++) {   
         cntReset();
-
-        // run single inference
-        res = run_inf(images[id], size);
+        res = run_inf(id);
         hwExecTime = cntRead();
-
-        printf("EXPECTED %d, RETURNED %d\n", results[id], res);
+        printf("EXPECTED %x, RETURNED %u\n", results[id], res);
     }
-
-    // print_intermediate_layer_head();
-    // read_raw_outputs();
-
-    printf("gross execution time per inference (including img load): %d\n", hwExecTime);
     printf("================================\n");
+    printf("gross execution time per inference (including img load): %d\n", hwExecTime);
+
     return 0;
 }
