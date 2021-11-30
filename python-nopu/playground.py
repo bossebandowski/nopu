@@ -11,8 +11,12 @@ def load_cifar10():
     return (train_images, train_labels), (test_images, test_labels)
 
 def send(ip, port, payload, s):
+    time.sleep(1)
     s.sendto(payload, (ip, port))
-    time.sleep(1)    
+
+def receive(s):
+    data, address = s.recvfrom(1024)
+    return data
 
 (_, _), (test_images, test_labels) = load_cifar10()
 
@@ -28,5 +32,7 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 for i in range(3):
     send(TARGET_IP, TARGET_PORT, img0.flatten()[i*1024:(i+1)*1024].tobytes(), sock)
 
+res = receive(sock)
+
 print("============")
-print("expecting ", int(label))
+print(f"expected {int(label)}, got {res}")

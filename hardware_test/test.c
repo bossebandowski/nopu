@@ -23,6 +23,9 @@ unsigned int PCKG_SIZE = 1024;
 unsigned int UDP_PORT = 5005;
 unsigned int rx_addr = 0x000;
 unsigned int tx_addr = 0x800;
+int32_t img[3072];
+unsigned char HOST_IP[4];	
+
 
 const uint fc = 2;
 const uint conv = 3;
@@ -41,7 +44,18 @@ void print_general_info(){
 	return;
 }
 
-int receive_img(){
+void send_res(int res) {
+    unsigned char buffer[15];
+    udp_t packet;
+    packet.data = buffer;
+
+    udp_build_packet(&packet, my_ip, HOST_IP, UDP_PORT, UDP_PORT, res, 13);
+    udp_send_packet(tx_addr, rx_addr, packet, 100000);
+    printf("sending udp packet to %u.%u.%u.%u:%u\n", HOST_IP[0], HOST_IP[1], HOST_IP[2], HOST_IP[3], UDP_PORT);
+    return;
+}
+
+void receive_img(){
 	enum eth_protocol packet_type;
 	unsigned char ans;
 	unsigned char udp_data[PCKG_SIZE];
@@ -50,9 +64,7 @@ int receive_img(){
 	unsigned short int destination_port;
 	eth_mac_initialize();
 	arp_table_init();
-    int32_t img[3072];
     int i = 0;
-    int *img_addr_0 = (int *)40;
 
 	while (i<3){
 		eth_mac_receive(rx_addr, 0);
@@ -71,15 +83,15 @@ int receive_img(){
 			udp_get_checksum(rx_addr);
 
 			if(ipv4_verify_checksum(rx_addr) == 1 && udp_verify_checksum(rx_addr) == 1 && ipv4_compare_ip(my_ip, destination_ip) == 1){
-                printf("udp packet received\n");
-			    printf("  - Data length %d B\n", udp_get_data_length(rx_addr));
+                printf(".");
+                for (int i = 0; i < 4; i++) {
+                    HOST_IP[i] = source_ip[i];
+                }
 				destination_port = udp_get_destination_port(rx_addr);
 				if(destination_port == UDP_PORT){
                     udp_get_data(rx_addr, udp_data, udp_get_data_length(rx_addr));
                     udp_data[udp_get_data_length(rx_addr)] = '\0';
-                    printf("  - The first pixel is: %u\n", udp_data[0]);
                     for (int idx = 0; idx < PCKG_SIZE; idx++) {
-                        // memcpy(img_addr_0, udp_data, PCKG_SIZE * 4);
                         img[i * PCKG_SIZE + idx] = udp_data[idx];
                     }
                     i++;
@@ -96,8 +108,10 @@ int receive_img(){
 		break;
 		}
 	}
-    
-	return &img[0];
+
+
+    printf("\n");    
+	return;
 }
 
 void load_nn_cifar_10()
@@ -154,9 +168,9 @@ void load_nn_cifar_10()
     cop_config(5, 6, 0);
 }
 
-void load_img(int id)
+void load_img()
 {
-    cop_config(0, 7, &images[id][0]);
+    cop_config(0, 7, &img[0]);
 }
 
 void read_raw_outputs()
@@ -183,27 +197,53 @@ void print_intermediate_layer_head(bool even, int offset, int count)
     }
 }
 
-int run_inf(int id) {
-    load_img(id);
+int run_inf() {
     cop_run();
     return cop_get_res();
 }
 
-int main(int argc, char **argv)
-{
+void run_emulator() {
     // load nn parameters into desired memory space. In the future, this will hopefully be copying from flash to sram
     int res;
     int hwExecTime;
     load_nn_cifar_10();
-    
-    for (int id = 0; id < 10; id++) {   
+    load_img();
+
+    for (int id = 0; id < 10; id++) {
+        // img = images[id];            FIX THIS   
         cntReset();
-        res = run_inf(id);
+        res = run_inf();
         hwExecTime = cntRead();
         printf("EXPECTED %x, RETURNED %u\n", results[id], res);
     }
+
     printf("================================\n");
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
+}
+
+void run_fpga() {
+    // load nn parameters into desired memory space. In the future, this will hopefully be copying from flash to sram
+    int res;
+    int hwExecTime;
+    printf("configuring network...");
+    load_nn_cifar_10();
+    printf("done\n");
+    printf("waiting for input via ethernet\n");
+    
+
+    for (;;) {
+        receive_img();
+        load_img();
+        res = run_inf();
+        printf("RESULT: %u\n", res);
+        send_res(res);
+    }
+}
+
+int main(int argc, char **argv)
+{
+    run_fpga();
+    // run_emulator();
 
     return 0;
 }
