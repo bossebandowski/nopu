@@ -5,6 +5,6 @@ set -e
 
 ./scripts/setup_patmos.sh
 pushd $PATMOSPATH
-make comp APP=test
-patemu tmp/test.elf
+make comp APP=emulator_test
+patemu tmp/emulator_test.elf
 popd

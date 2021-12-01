@@ -1,27 +1,89 @@
 # nopu
 
-## Release Notes v1.4
+## Release Notes v1.5
 
 - Still cifar10 dataset (image classification on small 3-channel input images. Input shape (32x32x3))
-- model architecture has not changed
-- model parameters are no longer copied to predetermined locations in SRAM, but rather the pointers are transferred to the accelerator on the fly
+- model architecture has not changed since release 1.3
+- established ethernet communication channel between host machine and FPGA
+- host sends input images and the FPGA returns the inference results
+- started implementing basic handshakes on top of UDP. FPGA acknowledges the arrival of image data, the host resends image chunks of ACK is missing
+- split tests into emulator and hardware tests because the emulator is not capable of handling ethernet io
 
 ## Setup and Run
 
 - Build patmos
 follow the instructions on `https://github.com/t-crest/patmos`
 
-- Clone this repo and use the scripts to build patmos plus the coprocessor and run a test script.
-  Careful if you are developing in your `~/t-crest/patmos` folder, these scripts might overwrite some files. 
+- Clone this repo and use the scripts to build patmos plus the coprocessor and run a test script in the emulator or on actual hardware. Careful if you are developing in your `~/t-crest/patmos` folder, these scripts might overwrite some files.
+
+1) Emulator
     ```
     chmod +x ./scripts/*.sh
     ./scripts/build_patemu.sh
     ./scripts/run_patemu.sh
     ```
 
+2) Hardware
+    - make sure to have quartus 19.1 installed on your host machine
+    - connect an Altera DE2-115 board to your machine via the USB blaster cable and the serial COM cable
+    - verify that the board can be programmed by running jtagconfig
+        ```
+        patmos@ubuntu:~/nopu$ jtagconfig
+            1) USB-Blaster [2-2.3]                        
+            020F70DD   10CL120(Y|Z)/EP3C120/..
+        ```
+    - make scripts executable
+        ```
+        chmod +x ./scripts/*.sh
+        ```
+    - generate verilog files and run synthesis
+        ```
+        ./scripts/build_fpga.sh
+        ```
+    - compile test script, program FPGA, and download program. Try again if the download fails
+        ```
+        ./scripts/run_fpga.sh
+            ...
+            [++++++++++] 251556/251556 bytes
+            sent 256516 raw bytes compressed to 159337 bytes (62%)
+            configuring network...done
+            ready to rumble
+        ```
+    - on your host machine, adapt the following network settings:
+        - SPEED 100000
+        - AUTONEG OFF
+        - FULL DUPLEX
+        - IPv4 address: `192.168.24.45`
+        - network mask: `255.255.255.0`
+        - default gateway: `192.168.24.1`
+
+    - verify that your host machine can communicate with the FPGA:
+        ```
+        ping 192.168.24.50
+        Reply from 192.168.24.50: bytes=32 time=1ms TTL=128
+        ```
+        if this does not work, try to update your network settings or reprogram the FPGA
+    - create a venv and install requirements
+        ```
+        python3 -m venv venv
+        # windows
+        venv\Scripts\activate
+        # linux
+        source venv/bin/activate
+
+        pip install -U pip cython setuptools wheel
+        pip install -r model_prep/requirements.txt
+        ```
+    - run inference script to send test images to the FPGA and evaluate the output
+        ```
+        cd python-nopu
+        python run_inf.py
+        ```
+
 ## Results
 
-- **Test script output**
+
+- **Emulator output**
     ```
     EXPECTED 3, RETURNED 3
     EXPECTED 8, RETURNED 8
@@ -34,11 +96,27 @@ follow the instructions on `https://github.com/t-crest/patmos`
     EXPECTED 3, RETURNED 3
     EXPECTED 0, RETURNED 1
     ================================
-    gross execution time per inference (including img load): 3216974
+    gross execution time per inference (including img load): 3216962
+    ```
 
+- **Hardware output (on host console)**
+    ```
+    expected CAT, got CAT
+    expected SHIP, got SHIP
+    expected SHIP, got SHIP
+    expected AIRPLANE, got AIRPLANE
+    expected FROG, got DEER
+    expected FROG, got FROG
+    expected AUTOMOBILE, got AUTOMOBILE
+    expected FROG, got FROG
+    expected CAT, got CAT
+    expected AUTOMOBILE, got AUTOMOBILE
+    accuracy: 0.9
+    average time: 0.06239337921142578
     ```
 - **Speed**
-    - clock cycles per inference: 3216974
+    - clock cycles per inference (net): 3216974
+    - seconds per inference (gross, including communication with host): 0.06s (can vary due to communication delays)
     - max frequency: 80 MHz
     - inferences per second: 24.87
 
@@ -60,33 +138,3 @@ follow the instructions on `https://github.com/t-crest/patmos`
 
 - **Accuracy**
 64%
-
-## Synthesis Report
-
-Flow Status	Successful - Thu Nov 18 11:33:23 2021
-
-Quartus Prime Version	19.1.0 Build 670 09/22/2019 Patches 0.02i SJ Lite Edition
-
-Revision Name	patmos
-
-Top-level Entity Name	patmos_top
-
-Family	Cyclone IV E
-
-Device	EP4CE115F29C7
-
-Timing Models	Final
-
-Total logic elements	25,062 / 114,480 ( 22 % )
-
-Total registers	7597
-
-Total pins	57 / 529 ( 11 % )
-
-Total virtual pins	0
-
-Total memory bits	1,195,200 / 3,981,312 ( 30 % )
-
-Embedded Multiplier 9-bit elements	101 / 532 ( 19 % )
-
-Total PLLs	1 / 4 ( 25 % )
