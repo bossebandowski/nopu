@@ -45,11 +45,12 @@ void print_general_info(){
 }
 
 void send_res(int res) {
-    unsigned char buffer[15];
+    unsigned char buffer[1];
+    unsigned char msg[] = {res};
     udp_t packet;
     packet.data = buffer;
 
-    udp_build_packet(&packet, my_ip, HOST_IP, UDP_PORT, UDP_PORT, res, 13);
+    udp_build_packet(&packet, my_ip, HOST_IP, UDP_PORT, UDP_PORT, msg, 1);
     udp_send_packet(tx_addr, rx_addr, packet, 100000);
     printf("sending udp packet to %u.%u.%u.%u:%u\n", HOST_IP[0], HOST_IP[1], HOST_IP[2], HOST_IP[3], UDP_PORT);
     return;
@@ -222,9 +223,7 @@ void run_emulator() {
 }
 
 void run_fpga() {
-    // load nn parameters into desired memory space. In the future, this will hopefully be copying from flash to sram
     int res;
-    int hwExecTime;
     printf("configuring network...");
     load_nn_cifar_10();
     printf("done\n");
@@ -235,8 +234,8 @@ void run_fpga() {
         receive_img();
         load_img();
         res = run_inf();
-        printf("RESULT: %u\n", res);
         send_res(res);
+        printf("RESULT: %u\n", res);
     }
 }
 
