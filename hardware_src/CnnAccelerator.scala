@@ -20,7 +20,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val FUNC_RUN              = "b00010".U(5.W)   // init inference
     val FUNC_GET_RES          = "b00100".U(5.W)   // read result register
 
-    val FUNC_CONFIG           = "b00011".U(5.W)   // TEST: write a value into memory
+    val FUNC_CONFIG           = "b00011".U(5.W)   // receive a network configuration
+    val FUNC_LOAD_IMG         = "b00110".U(5.W)   // write img pixel to BRAM
     val FUNC_MEM_R            = "b00101".U(5.W)   // TEST: read a value from memory
 
     // states COP control
@@ -40,6 +41,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val poolState = RegInit(0.U(8.W))
     val memState = RegInit(memIdle)
 
+    val emulator = RegInit(1.U(1.W))
     val outputUsage = RegInit(0.U(8.W))
 
     // BRAM memory and default assignments
@@ -159,6 +161,14 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                         stateReg := config
                     }
                 }
+                is(FUNC_LOAD_IMG) {
+                    when(isIdle) {
+                        bram.io.wrEna := true.B
+                        bram.io.wrAddr := io.copIn.opData(0).asUInt
+                        bram.io.wrData := io.copIn.opData(1).asSInt
+                        emulator := 0.U
+                    }
+                }
                 is(FUNC_MEM_R) {
                     when(isIdle) {
                         bram.io.rdAddr := io.copIn.opData(0)
@@ -218,9 +228,14 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             idx := 0.U                                      // reset idx which is used to figure out the index of the maximum value in the output layer
             inCount := 0.U
             bram_count_reg := 0.U
-            stateReg := load_image                          // start inference by moving image to bram
-            inAddr := image_address
             outAddr := 0.U
+            when (emulator === 1.U) {
+                stateReg := load_image                          // start inference by moving image to bram
+                inAddr := image_address
+            }
+            .otherwise {
+                stateReg := next_layer
+            }
         }
         is(load_image) {
             /*
