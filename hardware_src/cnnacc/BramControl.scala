@@ -1,8 +1,8 @@
-package util
+package cnnacc
 
 import chisel3._
 
-class MemorySInt() extends Module {
+class BramControl() extends Module {
     /*
     BRAM memory entity
     */

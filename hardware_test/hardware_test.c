@@ -49,7 +49,7 @@ void send_res(int res) {
 
     udp_build_packet(&packet, my_ip, HOST_IP, UDP_PORT, UDP_PORT, msg, 2);
     udp_send_packet(tx_addr, rx_addr, packet, 100000);
-    // printf("sending response to %u.%u.%u.%u:%u\n", HOST_IP[0], HOST_IP[1], HOST_IP[2], HOST_IP[3], UDP_PORT);
+    //printf("sending response to %u.%u.%u.%u:%u\n", HOST_IP[0], HOST_IP[1], HOST_IP[2], HOST_IP[3], UDP_PORT);
     return;
 }
 
@@ -147,7 +147,7 @@ void run_fpga() {
         receive_img();
         res = run_inf();
         send_res(res);
-        // printf("RESULT: %u\n", res);
+        //printf("RESULT: %u\n", res);
     }
 }
 
