@@ -49,7 +49,7 @@ void send_res(int res) {
 
     udp_build_packet(&packet, my_ip, HOST_IP, UDP_PORT, UDP_PORT, msg, 2);
     udp_send_packet(tx_addr, rx_addr, packet, 100000);
-    printf("sending response to %u.%u.%u.%u:%u\n", HOST_IP[0], HOST_IP[1], HOST_IP[2], HOST_IP[3], UDP_PORT);
+    //printf("sending response to %u.%u.%u.%u:%u\n", HOST_IP[0], HOST_IP[1], HOST_IP[2], HOST_IP[3], UDP_PORT);
     return;
 }
 
@@ -60,7 +60,7 @@ void send_ack() {
     packet.data = buffer;
     udp_build_packet(&packet, my_ip, HOST_IP, UDP_PORT, UDP_PORT, msg, 2);
     udp_send_packet(tx_addr, rx_addr, packet, 100000);
-    printf("sending SEQ %u BAT %u to %u.%u.%u.%u:%u\n", SEQ, BAT, HOST_IP[0], HOST_IP[1], HOST_IP[2], HOST_IP[3], UDP_PORT);
+    // printf("sending SEQ %u BAT %u to %u.%u.%u.%u:%u\n", SEQ, BAT, HOST_IP[0], HOST_IP[1], HOST_IP[2], HOST_IP[3], UDP_PORT);
     return;
 }
 
@@ -100,7 +100,7 @@ void receive_img(){
                     udp_get_data(rx_addr, udp_data, udp_get_data_length(rx_addr));
                     udp_data[udp_get_data_length(rx_addr)] = '\0';
                     for (int idx = 0; idx < PCKG_SIZE; idx++) {
-                        img[BAT * PCKG_SIZE + idx] = udp_data[idx];
+                        cop_send_px(BAT * PCKG_SIZE + idx, udp_data[idx]);
                     }
                     BAT++;
                     send_ack();
@@ -145,10 +145,9 @@ void run_fpga() {
 
     for (;;) {
         receive_img();
-        load_img();
         res = run_inf();
         send_res(res);
-        printf("RESULT: %u\n", res);
+        //printf("RESULT: %u\n", res);
     }
 }
 

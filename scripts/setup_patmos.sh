@@ -5,7 +5,7 @@ set -e
 
 # copy src files
 cp hardware_src/CnnAccelerator.scala $PATMOSPATH/hardware/src/main/scala/cop/
-cp hardware_src/MemorySInt.scala $PATMOSPATH/hardware/src/main/scala/util/
+cp -r hardware_src/cnnacc $PATMOSPATH/hardware/src/main/scala
 
 # copy test scripts
 cp hardware_test/* $PATMOSPATH/c/

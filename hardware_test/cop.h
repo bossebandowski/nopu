@@ -44,17 +44,17 @@ int32_t cop_get_res()
     return result;
 }
 
-void cop_mem_w(int addr, int val)
+void cop_send_px(int addr, int val)
 {
     register uint32_t addrReg __asm__("16") = addr;
     register uint32_t valReg __asm__("17") = val;
 
-    asm(".word 0x3470881"
+    asm(".word 0x34D0881"
         :
         : "r"(addrReg), "r"(valReg));
 
     // pref     01101
-    // func     00011
+    // func     00110
     // regA     10000
     // regB     10001
     // post     0000001
