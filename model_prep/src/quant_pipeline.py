@@ -214,9 +214,11 @@ def evaluate_model(model_type, test_set, path):
 
 def load_data(dataset, dl):
     if dataset == "mnist":
-        (train_images, train_labels), (test_images, test_labels) =  dl.load_mnist()
+        (train_images, train_labels), (test_images, test_labels) = dl.load_mnist()
     elif dataset == "cifar":
-        (train_images, train_labels), (test_images, test_labels) =  dl.load_cifar10()
+        (train_images, train_labels), (test_images, test_labels) = dl.load_cifar10()
+    elif dataset == "imgnet64":
+        (train_images, train_labels), (test_images, test_labels) = dl.load_imgnet64()
 
     train_images, test_images = train_images / 255.0, test_images / 255.0
     

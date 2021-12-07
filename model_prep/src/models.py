@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-DESCRIPTOR_LIST = ["basic_fc", "three_fc", "basic_conv", "min_conv", "min_pool", "cifar"]
+DESCRIPTOR_LIST = ["basic_fc", "three_fc", "basic_conv", "min_conv", "min_pool", "cifar", "imgnet"]
 
 basic_fc_model = tf.keras.Sequential(
     [
@@ -60,6 +60,32 @@ minimal_pool_model = tf.keras.Sequential(
     ]
 )
 
+imgnet_64_model = tf.keras.Sequential(
+    [
+        tf.keras.layers.Conv2D(16, (3, 3), activation="relu", input_shape=(64, 64, 3)),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Conv2D(16, (3, 3), activation="relu"),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Dropout(.2),
+        
+        tf.keras.layers.Conv2D(32, (3, 3), activation="relu"),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Conv2D(32, (3, 3), activation="relu"),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Conv2D(32, (3, 3), activation="relu"),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        
+        tf.keras.layers.Dropout(.2),
+        tf.keras.layers.Conv2D(32, (3, 3), activation="relu"),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Conv2D(32, (3, 3), activation="relu"),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(1000)
+    ]
+)
+
 
 def get_model(descriptor):
     if descriptor == "basic_conv":
@@ -74,5 +100,7 @@ def get_model(descriptor):
         return minimal_pool_model
     elif descriptor == "cifar":
         return cifar_conv_model
+    elif descriptor == "imgnet":
+        return imgnet_64_model
     else:
         raise ValueError("Model descriptor unknown!")
