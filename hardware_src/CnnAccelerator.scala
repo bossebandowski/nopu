@@ -129,6 +129,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // SRAM inputs
     conv_layer.io.sram_state := 0.U
     conv_layer.io.sram_rd_buffer := mem_r_buffer
+    conv_layer.io.sram_idle := (memState === memIdle)
+    conv_layer.io.sram_done := (memState === memDone)
 
     // CONFIG connections
     conv_layer.io.activation := 0.U
@@ -163,7 +165,21 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         addrReg := conv_layer.io.sram_addr
     }
 
+    when (conv_layer.io.sram_free_up) {
+        memState := memIdle
+    }
+
     // BRAM requests from layer components
+    when (conv_layer.io.bram_rd_req) {
+        bram.io.rdAddr := conv_layer.io.bram_rd_addr
+    }
+
+    when (conv_layer.io.bram_wr_req) {
+        bram.io.wrEna := true.B
+        bram.io.wrAddr := conv_layer.io.bram_wr_addr
+        bram.io.wrData := conv_layer.io.bram_wr_data
+    }
+
 
 
     // COP requests from patmos
@@ -373,11 +389,21 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(conv) {
+            conv_layer.io.activation := layer_meta_a(layer)
+            conv_layer.io.weight_addr := layer_meta_w(layer)
+            conv_layer.io.bias_addr := layer_meta_b(layer)
+            conv_layer.io.shape_in := layer_meta_s_i(layer)
+            conv_layer.io.shape_out := layer_meta_s_o(layer)
+            conv_layer.io.m_factor := layer_meta_m(layer)
+            conv_layer.io.even := ~layer(0)
+
+
+
+
+
             when(conv_layer.io.state === conv_done) {
-//                 stateReg := set_offset
+                stateReg := set_offset
                 conv_layer.io.ack := true.B
-stateReg := idle
-resReg := conv_layer.io.sram_addr
             }
         }
         is(pool) {

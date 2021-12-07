@@ -49,17 +49,14 @@ void run_emulator() {
     // load nn parameters into desired memory space. In the future, this will hopefully be copying from flash to sram
     int res;
     int hwExecTime;
-    printf("loading network...\n");
     load_nn_cifar_10();
-    printf("loading image...\n");
     load_img();
 
-    for (int id = 0; id < 1; id++) {
+    for (int id = 0; id < 10; id++) {
         for (int idx = 0; idx < IMAGE_LEN; idx ++) {
             img[idx] = images[id][idx];
         }
         cntReset();
-        printf("running inf...\n");
         res = run_inf();
         hwExecTime = cntRead();
         printf("EXPECTED %x, RETURNED %u\n", results[id], res);
