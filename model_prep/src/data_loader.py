@@ -1,5 +1,5 @@
 import tensorflow as tf
-import tensorflow_datasets as tfds
+# import tensorflow_datasets as tfds
 import numpy as np
 import pickle
 import os
@@ -23,7 +23,7 @@ def load_cifar10():
     (train_images, train_labels), (test_images, test_labels) = cifar10.load_data()
     
     return (train_images, train_labels), (test_images, test_labels)
-
+"""
 def load_imgnet64():
     def load_databatch(data_folder, idx, img_size=64):
         data_file = os.path.join(data_folder, f'train_data_batch_{idx}.npz')
@@ -72,3 +72,4 @@ def load_imgnet64():
         Ys = np.concatenate((Ys, ds['Y_train']), axis=0)
 
     print(Xs.shape)
+"""

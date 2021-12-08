@@ -59,7 +59,7 @@ minimal_pool_model = tf.keras.Sequential(
         tf.keras.layers.Dense(12),
     ]
 )
-
+"""
 imgnet_64_model = tf.keras.Sequential(
     [
         tf.keras.layers.Conv2D(16, (3, 3), activation="relu", input_shape=(64, 64, 3)),
@@ -85,7 +85,7 @@ imgnet_64_model = tf.keras.Sequential(
         tf.keras.layers.Dense(1000)
     ]
 )
-
+"""
 
 def get_model(descriptor):
     if descriptor == "basic_conv":
@@ -100,7 +100,9 @@ def get_model(descriptor):
         return minimal_pool_model
     elif descriptor == "cifar":
         return cifar_conv_model
+        """
     elif descriptor == "imgnet":
         return imgnet_64_model
+        """
     else:
         raise ValueError("Model descriptor unknown!")
