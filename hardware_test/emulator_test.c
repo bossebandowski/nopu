@@ -64,6 +64,7 @@ void run_emulator() {
 
     printf("================================\n");
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
+
 }
 
 int main(int argc, char **argv)

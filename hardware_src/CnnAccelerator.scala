@@ -42,7 +42,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val poolState = RegInit(0.U(8.W))
     val memState = RegInit(memIdle)
 
-    val emulator = RegInit(1.U(1.W))
+    val emulator = RegInit(true.B)
     val outputUsage = RegInit(0.U(8.W))
 
     // BRAM memory and default assignments
@@ -120,7 +120,6 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
 /* ================================================= LAYER HARDWARE INIT ============================================= */ 
 
-    // ================================================== CONV ==================================================
     val conv_layer = Module(new LayerConv())
     
     // BRAM inputs
@@ -144,11 +143,30 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // OTHER
     conv_layer.io.run := false.B
     conv_layer.io.ack := false.B
-    // ================================================== POOL ==================================================
 
+    val pool_layer = Module(new LayerMaxPool())
+    
+    // BRAM inputs
+    pool_layer.io.bram_rd_data := bram.io.rdData
 
-    // =================================================== FC ===================================================
+    // SRAM inputs
+    pool_layer.io.sram_state := 0.U
+    pool_layer.io.sram_rd_buffer := Seq(0.U, 0.U, 0.U, 0.U)
+    pool_layer.io.sram_idle := false.B
+    pool_layer.io.sram_done := false.B
 
+    // CONFIG connections
+    pool_layer.io.activation := 0.U
+    pool_layer.io.weight_addr := 0.U
+    pool_layer.io.bias_addr := 0.U
+    pool_layer.io.shape_in := 0.U
+    pool_layer.io.shape_out := 0.U
+    pool_layer.io.m_factor := 0.U
+    pool_layer.io.even := false.B
+
+    // OTHER
+    pool_layer.io.run := false.B
+    pool_layer.io.ack := false.B
 
 /* ============================================== CMD HANDLING ============================================ */ 
 
@@ -173,11 +191,20 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     when (conv_layer.io.bram_rd_req) {
         bram.io.rdAddr := conv_layer.io.bram_rd_addr
     }
+    .elsewhen (pool_layer.io.bram_rd_req) {
+        bram.io.rdAddr := pool_layer.io.bram_rd_addr
+    }
+
 
     when (conv_layer.io.bram_wr_req) {
         bram.io.wrEna := true.B
         bram.io.wrAddr := conv_layer.io.bram_wr_addr
         bram.io.wrData := conv_layer.io.bram_wr_data
+    }
+    .elsewhen(pool_layer.io.bram_wr_req) {
+        bram.io.wrEna := true.B
+        bram.io.wrAddr := pool_layer.io.bram_wr_addr
+        bram.io.wrData := pool_layer.io.bram_wr_data
     }
 
 
@@ -230,7 +257,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                         bram.io.wrEna := true.B
                         bram.io.wrAddr := io.copIn.opData(0).asUInt
                         bram.io.wrData := io.copIn.opData(1).asSInt
-                        emulator := 0.U
+                        emulator := false.B
                     }
                 }
                 is(FUNC_MEM_R) {
@@ -293,7 +320,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             inCount := 0.U
             bram_count_reg := 0.U
             outAddr := 0.U
-            when (emulator === 1.U) {
+            when (emulator) {
                 stateReg := load_image                          // start inference by moving image to bram
                 inAddr := image_address
             }
@@ -378,7 +405,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 }
                 is (pool) {
                     stateReg := pool
-                    poolState := pool_init
+                    pool_layer.io.run := true.B
                 }
             }
         }
@@ -397,19 +424,23 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             conv_layer.io.m_factor := layer_meta_m(layer)
             conv_layer.io.even := ~layer(0)
 
-
-
-
-
             when(conv_layer.io.state === conv_done) {
+
+
                 stateReg := set_offset
                 conv_layer.io.ack := true.B
             }
         }
         is(pool) {
-            when(poolState === pool_done) {
+            pool_layer.io.shape_in := layer_meta_s_i(layer)
+            pool_layer.io.shape_out := layer_meta_s_o(layer)
+            pool_layer.io.m_factor := layer_meta_m(layer)
+            pool_layer.io.even := ~layer(0)
+
+
+            when(pool_layer.io.state === pool_done) {
                 stateReg := set_offset
-                poolState := pool_idle
+                pool_layer.io.ack := true.B
             }
         }
         is(set_offset) {
@@ -776,98 +807,6 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 .otherwise {
                     fcState := fc_done                      // done with layer
                 }
-            }
-        }
-    }
-
-
-/* ================================================= POOL LAYER ============================================ */
-
-    switch(poolState) {
-        is(pool_idle) {
-            
-        }
-        is(pool_init) {
-            x := 0.S
-            y := 0.S
-            dx := 0.S
-            dy := 0.S
-            curMax := abs_min.S
-            inCount := 0.U
-            
-            w := layer_meta_s_i(layer)(31, 24).asSInt
-            filter_size := layer_meta_s_i(layer)(23, 20).asSInt
-            stride_length := layer_meta_s_i(layer)(19, 16).asSInt
-            output_depth := layer_meta_s_i(layer)(15, 8)
-            input_depth := layer_meta_s_i(layer)(7, 0)
-            
-            poolState := pool_in_addr_set
-
-        }
-        is(pool_in_addr_set) {
-
-            when (layer(0) === 0.U) {
-                bram.io.rdAddr := ((stride_length * y + dy) * input_depth.asSInt * w + (stride_length * x + dx) * input_depth.asSInt + inCount.asSInt).asUInt
-            }
-            .otherwise {
-                bram.io.rdAddr := (layer_offset.asSInt + (stride_length * y + dy) * input_depth.asSInt * w + (stride_length * x + dx) * input_depth.asSInt + inCount.asSInt).asUInt
-            }
-                
-            poolState := pool_find_max
-        }
-        is(pool_find_max) {
-            when(bram.io.rdData > curMax) {
-                curMax := bram.io.rdData
-            }
-
-            when (dx === filter_size - 1.S && dy === filter_size - 1.S) {
-                dx := 0.S
-                dy := 0.S                
-                poolState := pool_write_output
-            }
-            .elsewhen (dx === filter_size - 1.S && dy < filter_size - 1.S) {
-                dx := 0.S
-                dy := dy + 1.S
-
-                poolState := pool_in_addr_set
-            }
-            .otherwise {
-                dx := dx + 1.S
-
-                poolState := pool_in_addr_set
-            }
-        }
-        is(pool_write_output) {
-            when (layer(0) === 0.U) {                           // even layers
-                bram.io.wrAddr := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + inCount.asSInt + layer_offset.asSInt).asUInt
-            }
-            .otherwise {                                        // odd layers
-                bram.io.wrAddr := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + inCount.asSInt).asUInt
-            }
-
-            bram.io.wrEna := true.B
-            bram.io.wrData := curMax
-            curMax := abs_min.S
-
-            when (x === output_depth.asSInt && y === output_depth.asSInt) {
-                when (inCount < input_depth - 1.U) {
-                    x := 0.S
-                    y := 0.S
-                    inCount := inCount + 1.U
-                    poolState := pool_in_addr_set
-                }
-                .otherwise {
-                    poolState := pool_done
-                }
-            }
-            .elsewhen(x === output_depth.asSInt && y < output_depth.asSInt) {
-                x := 0.S
-                y := y + 1.S
-                poolState := pool_in_addr_set
-            }
-            .otherwise {
-                x := x + 1.S
-                poolState := pool_in_addr_set
             }
         }
     }
