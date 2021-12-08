@@ -5,10 +5,9 @@ import chisel3.util._
 
 import ocp._
 import patmos.Constants._
+import cnnacc.Config._
 
 class LayerMaxPool() extends Layer {
-    // states POOL layer
-    val pool_idle :: pool_done :: pool_init :: pool_in_addr_set :: pool_find_max :: pool_write_output :: Nil = Enum(6)
 
     val filter3x3 = Reg(Vec(9, SInt(DATA_WIDTH.W)))
     val in_map = Reg(Vec(9, SInt(DATA_WIDTH.W)))
@@ -18,14 +17,12 @@ class LayerMaxPool() extends Layer {
     val z = RegInit(1.U(DATA_WIDTH.W))
     val dx = RegInit(-1.S(8.W))
     val dy = RegInit(-1.S(8.W))
-    val w = RegInit(28.S(8.W))
+    val w = RegInit(0.S(8.W))
     val filter_size = RegInit(0.S(8.W))
     val input_depth = RegInit(0.U(8.W))
     val output_depth = RegInit(0.U(8.W))
     val stride_length = RegInit(0.S(8.W))
-    val cur_max = RegInit(abs_min.S(DATA_WIDTH.W))
-    val abs_min = -2147483646
-
+    val cur_max = RegInit(ABS_MIN.S(DATA_WIDTH.W))
 
     /* ================================================= CMD HANDLING ============================================ */
 
@@ -52,7 +49,7 @@ class LayerMaxPool() extends Layer {
             y := 0.S
             dx := 0.S
             dy := 0.S
-            cur_max := abs_min.S
+            cur_max := ABS_MIN.S
             count_a := 0.U
 
             state := pool_in_addr_set
@@ -96,7 +93,7 @@ class LayerMaxPool() extends Layer {
 
             io.bram_wr_req := true.B
             io.bram_wr_data := cur_max
-            cur_max := abs_min.S
+            cur_max := ABS_MIN.S
 
             when (even) {
                 io.bram_wr_addr := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + count_a.asSInt + layer_offset.asSInt).asUInt

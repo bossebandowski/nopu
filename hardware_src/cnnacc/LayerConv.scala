@@ -5,12 +5,11 @@ import chisel3.util._
 
 import ocp._
 import patmos.Constants._
+import cnnacc.Config._
 
 class LayerConv() extends Layer {
-    // states CONV layer
-    val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: conv_addr_set :: conv_out_address_set :: conv_load_output :: conv_load_m :: conv_requantize :: Nil = Enum(15)
 
-    val ms = Reg(Vec(32, UInt(32.W)))
+    val ms = Reg(Vec(MAX_CONVOLUTIONS, UInt(32.W)))
 
     val filter3x3 = Reg(Vec(9, SInt(DATA_WIDTH.W)))
     val in_map = Reg(Vec(9, SInt(DATA_WIDTH.W)))
@@ -20,7 +19,7 @@ class LayerConv() extends Layer {
     val z = RegInit(1.U(DATA_WIDTH.W))
     val dx = RegInit(-1.S(8.W))
     val dy = RegInit(-1.S(8.W))
-    val w = RegInit(28.S(8.W))
+    val w = RegInit(0.S(8.W))
     val filter_size = RegInit(0.S(8.W))
     val input_depth = RegInit(0.U(8.W))
     val output_depth = RegInit(0.U(8.W))

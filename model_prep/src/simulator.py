@@ -381,7 +381,7 @@ def process_model_cifar(nodes, img, weights, filters, biases, Ms):
     flatten(nodes, 3)
 
     # layer 4
-    mac_fc(nodes[3], nodes[4], weights, 0)
+    mac_fc(nodes[3], nodes[4], weights, 0)    
     bias(nodes[4], biases[2])
     requantize_activations(nodes, 4, Ms[2], False)
     relu(nodes[4], False)
