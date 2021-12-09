@@ -23,7 +23,8 @@ class LayerConv() extends Layer {
     val input_depth = RegInit(0.U(8.W))
     val output_depth = RegInit(0.U(8.W))
     val stride_length = RegInit(0.S(8.W))
-
+    val idx = RegInit(0.U(8.W))
+    val addr_reg = RegInit(0.U(32.W))
     val in_offset = Wire(UInt())
     val out_offset = Wire(UInt())
 
@@ -122,12 +123,17 @@ class LayerConv() extends Layer {
             }
         }
         is(conv_addr_set) {
+            addr_reg := (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
+            idx := ((dx + 1.S) + (dy + 1.S) * filter_size).asUInt
+            state := conv_rd_delay
+        }
+        is(conv_rd_delay) {
             io.bram_rd_req := true.B
-            io.bram_rd_addr := (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
+            io.bram_rd_addr := addr_reg
             state := conv_load_input
         }
         is(conv_load_input) {
-            in_map(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt) := io.bram_rd_data
+            in_map(idx) := io.bram_rd_data
 
             when(dx === 1.S && dy === 1.S) {
                 state := conv_load_output
