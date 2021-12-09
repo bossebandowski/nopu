@@ -23,13 +23,6 @@ class LayerMaxPool() extends Layer {
     val output_depth = RegInit(0.U(8.W))
     val stride_length = RegInit(0.S(8.W))
     val cur_max = RegInit(ABS_MIN.S(DATA_WIDTH.W))
-    val addr_reg = RegInit(0.U(DATA_WIDTH.W))
-
-    val in_offset = Wire(UInt())
-    val out_offset = Wire(UInt())
-
-    in_offset := ~even * layer_offset
-    out_offset := even * layer_offset
 
     /* ================================================= CMD HANDLING ============================================ */
 
@@ -63,12 +56,15 @@ class LayerMaxPool() extends Layer {
 
         }
         is(pool_in_addr_set) {
-            addr_reg := ((stride_length * y + dy) * input_depth.asSInt * w + (stride_length * x + dx) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
-            state := pool_rd_delay
-        }
-        is(pool_rd_delay) {
             io.bram_rd_req := true.B
-            io.bram_rd_addr := addr_reg
+
+            when (even) {
+                io.bram_rd_addr := ((stride_length * y + dy) * input_depth.asSInt * w + (stride_length * x + dx) * input_depth.asSInt + count_a.asSInt).asUInt
+            }
+            .otherwise {
+                io.bram_rd_addr := (layer_offset.asSInt + (stride_length * y + dy) * input_depth.asSInt * w + (stride_length * x + dx) * input_depth.asSInt + count_a.asSInt).asUInt
+            }
+                
             state := pool_find_max
         }
         is(pool_find_max) {
@@ -79,7 +75,7 @@ class LayerMaxPool() extends Layer {
             when (dx === filter_size - 1.S && dy === filter_size - 1.S) {
                 dx := 0.S
                 dy := 0.S                
-                state := pool_wr_delay
+                state := pool_write_output
             }
             .elsewhen (dx === filter_size - 1.S && dy < filter_size - 1.S) {
                 dx := 0.S
@@ -93,16 +89,18 @@ class LayerMaxPool() extends Layer {
                 state := pool_in_addr_set
             }
         }
-        is(pool_wr_delay) {
-            state := pool_write_output
-            addr_reg := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + count_a.asSInt).asUInt + out_offset
-        }
         is(pool_write_output) {
 
             io.bram_wr_req := true.B
             io.bram_wr_data := cur_max
-            io.bram_wr_addr := addr_reg
             cur_max := ABS_MIN.S
+
+            when (even) {
+                io.bram_wr_addr := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + count_a.asSInt + layer_offset.asSInt).asUInt
+            }
+            .otherwise {
+                io.bram_wr_addr := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + count_a.asSInt).asUInt
+            }
 
             when (x === output_depth.asSInt && y === output_depth.asSInt) {
                 when (count_a < input_depth - 1.U) {
