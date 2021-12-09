@@ -18,7 +18,7 @@ object Config {
     // states POOL layer
     val pool_idle :: pool_done :: pool_init :: pool_in_addr_set :: pool_find_max :: pool_write_output :: Nil = Enum(6)
     // states SRAM control
-    val memIdle :: memDone :: memReadReq :: memRead :: memWriteReq :: memWrite :: Nil = Enum(6)
+    val mem_idle :: mem_done :: mem_read_req :: mem_read :: mem_write_req :: mem_write :: Nil = Enum(6)
 
     // coprocessor function definitions
     val FUNC_RESET            = "b00000".U(5.W)   // reset coprocessor

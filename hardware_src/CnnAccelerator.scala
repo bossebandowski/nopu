@@ -17,7 +17,7 @@ import patmos.Constants._
 class CnnAccelerator() extends CoprocessorMemoryAccess() {
     
     val stateReg = RegInit(0.U(8.W))
-    val memState = RegInit(memIdle)
+    val mem_state = RegInit(mem_idle)
 
     val emulator = RegInit(true.B)
 
@@ -73,8 +73,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // SRAM inputs
     conv_layer.io.sram_state := 0.U
     conv_layer.io.sram_rd_buffer := mem_r_buffer
-    conv_layer.io.sram_idle := (memState === memIdle)
-    conv_layer.io.sram_done := (memState === memDone)
+    conv_layer.io.sram_idle := (mem_state === mem_idle)
+    conv_layer.io.sram_done := (mem_state === mem_done)
 
     // CONFIG connections
     conv_layer.io.activation := 0.U
@@ -121,8 +121,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // SRAM inputs
     fc_layer.io.sram_state := 0.U
     fc_layer.io.sram_rd_buffer := mem_r_buffer
-    fc_layer.io.sram_idle := (memState === memIdle)
-    fc_layer.io.sram_done := (memState === memDone)
+    fc_layer.io.sram_idle := (mem_state === mem_idle)
+    fc_layer.io.sram_done := (mem_state === mem_done)
 
     // CONFIG connections
     fc_layer.io.activation := 0.U
@@ -143,29 +143,29 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // SRAM requests from layer components
     when (conv_layer.io.sram_wr_req) {
         mem_w_buffer := conv_layer.io.sram_wr_buffer
-        memState := memWriteReq
+        mem_state := mem_write_req
         addrReg := conv_layer.io.sram_addr
     }
     .elsewhen (fc_layer.io.sram_wr_req) {
         mem_w_buffer := fc_layer.io.sram_wr_buffer
-        memState := memWriteReq
+        mem_state := mem_write_req
         addrReg := fc_layer.io.sram_addr
     }
 
     when (conv_layer.io.sram_rd_req) {
-        memState := memReadReq
+        mem_state := mem_read_req
         addrReg := conv_layer.io.sram_addr
     }
     .elsewhen (fc_layer.io.sram_rd_req) {
-        memState := memReadReq
+        mem_state := mem_read_req
         addrReg := fc_layer.io.sram_addr
     }
 
     when (conv_layer.io.sram_free_up) {
-        memState := memIdle
+        mem_state := mem_idle
     }
     .elsewhen (fc_layer.io.sram_free_up) {
-        memState := memIdle
+        mem_state := mem_idle
     }
 
     // BRAM requests from layer components
@@ -198,7 +198,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
     // COP requests from patmos
     val isIdle = Wire(Bool())
-    isIdle := stateReg === idle && memState === memIdle
+    isIdle := stateReg === idle && mem_state === mem_idle
 
     // default values
     io.copOut.result := 10.U
@@ -321,13 +321,13 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             For full word inputs only
             */
 
-            when (memState === memIdle) {                   // wait until memory is ready
+            when (mem_state === mem_idle) {                   // wait until memory is ready
                 addrReg := emulator_address                           // load current input address
-                memState := memReadReq                      // force memory into read request state
+                mem_state := mem_read_req                      // force memory into read request state
             }
 
-            when (memState === memDone) {                   // wait until transaction is finished
-                memState := memIdle                         // mark memory as idle
+            when (mem_state === mem_done) {                   // wait until transaction is finished
+                mem_state := mem_idle                         // mark memory as idle
                 stateReg := write_bram                      // load weights next
                 emulator_input(0) := mem_r_buffer(0).asSInt          // load 4 px
                 emulator_input(1) := mem_r_buffer(1).asSInt           
@@ -537,7 +537,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             mem_r_buffer := Seq(0.U, 0.U, 0.U, 0.U)
             mem_w_buffer := Seq(0.U, 0.U, 0.U, 0.U)
 
-            memState := memIdle
+            mem_state := mem_idle
             stateReg := reset_memory
         }
     }
@@ -553,35 +553,35 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     io.memPort.M.DataByteEn := "b1111".U
 
     // memory state machine
-    switch(memState) {
-        is(memReadReq) {
+    switch(mem_state) {
+        is(mem_read_req) {
             io.memPort.M.Cmd := OcpCmd.RD
             io.memPort.M.Addr := addrReg
             burst_count_reg := 0.U
             when(io.memPort.S.CmdAccept === 1.U) {
-                memState := memRead
+                mem_state := mem_read
             }
         }
-        is(memRead) {
+        is(mem_read) {
             mem_r_buffer(burst_count_reg) := io.memPort.S.Data
             when(io.memPort.S.Resp === OcpResp.DVA) {
                 burst_count_reg := burst_count_reg + 1.U
             }
             when (burst_count_reg + 1.U === BURST_LENGTH.U) {
-                memState := memDone
+                mem_state := mem_done
             }
         }
-        is(memWriteReq) {
+        is(mem_write_req) {
             io.memPort.M.Cmd := OcpCmd.WR
             io.memPort.M.Addr := addrReg
             io.memPort.M.Data := mem_w_buffer(0)
             io.memPort.M.DataValid := 1.U
             when(io.memPort.S.CmdAccept === 1.U && io.memPort.S.DataAccept === 1.U) {
                 burst_count_reg := 1.U
-                memState := memWrite
+                mem_state := mem_write
             }
         }
-        is(memWrite) {
+        is(mem_write) {
             io.memPort.M.Data := mem_w_buffer(burst_count_reg);
             io.memPort.M.DataValid := 1.U
             when(io.memPort.S.DataAccept === 1.U) {
@@ -589,7 +589,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
 
             when(io.memPort.S.Resp === OcpResp.DVA) {
-                memState := memDone
+                mem_state := mem_done
             }
         }
     }
