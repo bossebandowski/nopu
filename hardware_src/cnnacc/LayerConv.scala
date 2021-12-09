@@ -24,6 +24,12 @@ class LayerConv() extends Layer {
     val output_depth = RegInit(0.U(8.W))
     val stride_length = RegInit(0.S(8.W))
 
+    val in_offset = Wire(UInt())
+    val out_offset = Wire(UInt())
+
+    in_offset := ~even * layer_offset
+    out_offset := even * layer_offset
+
     /* ================================================= CMD HANDLING ============================================ */
 
     when (io.run && state === conv_idle) {
@@ -60,14 +66,8 @@ class LayerConv() extends Layer {
 
             state := conv_load_m
 
-            when (io.even) {
-                out_addr := layer_offset
-                in_addr := ((io.shape_in(31, 24).asSInt + 1.S) * io.shape_in(15, 8)).asUInt
-            }
-            .otherwise {
-                out_addr := 0.U
-                in_addr := (io.shape_in(31, 24).asSInt + (w + 1.S) * io.shape_in(15, 8)).asUInt
-            }
+            in_addr := ((io.shape_in(31, 24).asSInt + 1.S) * io.shape_in(15, 8)).asUInt + ~io.even * layer_offset
+            out_addr := io.even * layer_offset
         }
         is(conv_load_m) {
             when (io.sram_idle) {
@@ -208,14 +208,8 @@ class LayerConv() extends Layer {
                 when (z < input_depth - 1.U) {
                     z := z + 1.U         
                     // next input channel, same filter (but different filter layer)
-                    when (even) {
-                        in_addr := ((w + 1.S) * input_depth.asSInt + z.asSInt + 1.S).asUInt
-                        out_addr := layer_offset + count_a 
-                    }
-                    .otherwise {
-                        in_addr := (layer_offset.asSInt + (w + 1.S) * input_depth.asSInt + z.asSInt + 1.S).asUInt
-                        out_addr := count_a
-                    }
+                    in_addr := ((w + 1.S) * input_depth.asSInt + z.asSInt + 1.S).asUInt + in_offset
+                    out_addr := count_a + out_offset
 
                     state := conv_load_filter
                 }
@@ -231,21 +225,15 @@ class LayerConv() extends Layer {
                         count_a := count_a + 1.U
 
                         // reset in address
-                        when (even) {
-                            in_addr := ((w + 1.S) * input_depth.asSInt).asUInt
-                            out_addr := layer_offset + count_a + 1.U
-                        }
-                        .otherwise {
-                            in_addr := (layer_offset.asSInt + (w + 1.S) * input_depth.asSInt).asUInt
-                            out_addr := count_a + 1.U
-                        }
+                        in_addr := ((w + 1.S) * input_depth.asSInt).asUInt + in_offset
+                        out_addr := count_a + 1.U + out_offset
                         
                         // state transition
                         state := conv_load_bias
                     }
                     .otherwise {
-                        // when done with all filters
-                        state := conv_done                  // done with layer
+                        // when done with all filters, done with layer
+                        state := conv_done
                     }
                 }
             }
@@ -256,12 +244,8 @@ class LayerConv() extends Layer {
                 // increment y
                 y := y + 1.S
                 // set center of next in map
-                when (even) {
-                    in_addr := ((y + 1.S) * w * input_depth.asSInt + input_depth.asSInt + z.asSInt).asUInt
-                }
-                .otherwise {
-                    in_addr := (layer_offset.asSInt + (y + 1.S) * w * input_depth.asSInt + input_depth.asSInt + z.asSInt).asUInt
-                }
+                in_addr := ((y + 1.S) * w * input_depth.asSInt + input_depth.asSInt + z.asSInt).asUInt + in_offset
+
                 // state transition
                 state := conv_out_address_set
             }
@@ -269,25 +253,14 @@ class LayerConv() extends Layer {
             .otherwise {
                 // increment x
                 x := x + 1.S
-
                 // set center of next in map
-                when (even) {
-                    in_addr := (y * w * input_depth.asSInt + (x + 1.S) * input_depth.asSInt + z.asSInt).asUInt
-                }
-                .otherwise {
-                    in_addr := (layer_offset.asSInt + y * w * input_depth.asSInt + (x + 1.S) * input_depth.asSInt + z.asSInt).asUInt
-                }
+                in_addr := (y * w * input_depth.asSInt + (x + 1.S) * input_depth.asSInt + z.asSInt).asUInt + in_offset
                 // state transition
                 state := conv_out_address_set
             }
         }
         is(conv_out_address_set) {
-            when (even) {
-                out_addr := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt + layer_offset.asSInt).asUInt
-            }
-            .otherwise {
-                out_addr := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt).asUInt
-            }
+            out_addr := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt).asUInt + out_offset
             state := conv_addr_set
         }
         is(conv_done) {
