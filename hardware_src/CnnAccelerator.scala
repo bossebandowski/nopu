@@ -455,7 +455,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
         }
         is(clear_layer) {
 
-            when(outCount < maxOut - 1.U) {
+            when(outCount < maxOut + 16.U) {
                 bram.io.wrEna := true.B
                 bram.io.wrAddr := outAddr
                 bram.io.wrData := 0.S
@@ -513,7 +513,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             /*
             reset network nodes in last layer to 0 to be ready for next inference
             */
-            when(outCount < layer_meta_s_o(layer)) {
+            when(outCount < layer_meta_s_o(layer) + 16.U) {
                 bram.io.wrEna := true.B
                 bram.io.wrAddr := outAddr
                 bram.io.wrData := 0.S

@@ -11,7 +11,6 @@ class LayerConv() extends Layer {
 
     val ms = Reg(Vec(MAX_CONVOLUTIONS, UInt(32.W)))
 
-    val filter3x3 = Reg(Vec(9, SInt(DATA_WIDTH.W)))
     val in_map = Reg(Vec(9, SInt(DATA_WIDTH.W)))
 
     val x = RegInit(1.S(DATA_WIDTH.W))
@@ -48,7 +47,6 @@ class LayerConv() extends Layer {
             output_depth := io.shape_in(7, 0)
             sram_addr_reg := io.m_factor
             even := io.even
-
 
             count_a := 0.U
             count_b := 0.U
@@ -111,15 +109,15 @@ class LayerConv() extends Layer {
             }
             .elsewhen (io.sram_done) {
                 io.sram_free_up := true.B
-                filter3x3(0) := io.sram_rd_buffer(0)(31, 24).asSInt
-                filter3x3(1) := io.sram_rd_buffer(0)(23, 16).asSInt
-                filter3x3(2) := io.sram_rd_buffer(0)(15, 8).asSInt
-                filter3x3(3) := io.sram_rd_buffer(1)(31, 24).asSInt
-                filter3x3(4) := io.sram_rd_buffer(1)(23, 16).asSInt
-                filter3x3(5) := io.sram_rd_buffer(1)(15, 8).asSInt
-                filter3x3(6) := io.sram_rd_buffer(2)(31, 24).asSInt
-                filter3x3(7) := io.sram_rd_buffer(2)(23, 16).asSInt
-                filter3x3(8) := io.sram_rd_buffer(2)(15, 8).asSInt
+                ws(0) := io.sram_rd_buffer(0)(31, 24).asSInt
+                ws(1) := io.sram_rd_buffer(0)(23, 16).asSInt
+                ws(2) := io.sram_rd_buffer(0)(15, 8).asSInt
+                ws(3) := io.sram_rd_buffer(1)(31, 24).asSInt
+                ws(4) := io.sram_rd_buffer(1)(23, 16).asSInt
+                ws(5) := io.sram_rd_buffer(1)(15, 8).asSInt
+                ws(6) := io.sram_rd_buffer(2)(31, 24).asSInt
+                ws(7) := io.sram_rd_buffer(2)(23, 16).asSInt
+                ws(8) := io.sram_rd_buffer(2)(15, 8).asSInt
                 state := conv_addr_set
             }
         }
@@ -153,7 +151,7 @@ class LayerConv() extends Layer {
             state := conv_apply_filter
         }
         is(conv_apply_filter) {
-            outs(0) := outs(0) + filter3x3(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt) * in_map(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt)
+            outs(0) := outs(0) + ws(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt) * in_map(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt)
 
             when(dx === 1.S && dy === 1.S) {
                 dx := -1.S

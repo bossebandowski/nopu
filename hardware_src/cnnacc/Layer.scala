@@ -66,9 +66,9 @@ class Layer() extends Module {
     val in_addr = RegInit(0.U(32.W))
     val out_addr = RegInit(0.U(32.W))
 
-    val ws = Reg(Vec(4, SInt(8.W)))
-    val bs = Reg(Vec(BURST_LENGTH, SInt(DATA_WIDTH.W)))
-    val outs = Reg(Vec(4, SInt(DATA_WIDTH.W)))
+    val ws = Reg(Vec(16, SInt(8.W)))
+    val outs = Reg(Vec(16, SInt(DATA_WIDTH.W)))
+    val bs = Reg(Vec(4, SInt(DATA_WIDTH.W)))
     val tmp64 = Reg(Vec(4, SInt(64.W)))
 
     // counts
