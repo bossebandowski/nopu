@@ -14,7 +14,7 @@ object Config {
     // states FC layer
     val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: fc_requantize :: fc_load_m :: Nil = Enum(14)
     // states CONV layer
-    val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: conv_addr_set :: conv_out_address_set :: conv_load_output :: conv_load_m :: conv_requantize :: Nil = Enum(15)
+    val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: conv_rd_addr_set :: conv_wr_addr_set :: conv_load_output :: conv_load_m :: conv_requantize :: Nil = Enum(15)
     // states POOL layer
     val pool_idle :: pool_done :: pool_init :: pool_in_addr_set :: pool_find_max :: pool_write_output :: pool_rd_delay :: pool_wr_delay :: Nil = Enum(8)
     // states SRAM control

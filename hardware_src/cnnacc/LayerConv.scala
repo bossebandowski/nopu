@@ -118,10 +118,10 @@ class LayerConv() extends Layer {
                 ws(6) := io.sram_rd_buffer(2)(31, 24).asSInt
                 ws(7) := io.sram_rd_buffer(2)(23, 16).asSInt
                 ws(8) := io.sram_rd_buffer(2)(15, 8).asSInt
-                state := conv_addr_set
+                state := conv_rd_addr_set
             }
         }
-        is(conv_addr_set) {
+        is(conv_rd_addr_set) {
             io.bram_rd_req := true.B
             io.bram_rd_addr := (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
             state := conv_load_input
@@ -139,11 +139,11 @@ class LayerConv() extends Layer {
             .elsewhen (dx === 1.S && dy < 1.S) {
                 dx := -1.S
                 dy := dy + 1.S
-                state := conv_addr_set
+                state := conv_rd_addr_set
             }
             .otherwise {
                 dx := dx + 1.S
-                state := conv_addr_set
+                state := conv_rd_addr_set
             }
         }
         is(conv_load_output) {
@@ -247,7 +247,7 @@ class LayerConv() extends Layer {
                 in_addr := ((y + 1.S) * w * input_depth.asSInt + input_depth.asSInt + z.asSInt).asUInt + in_offset
 
                 // state transition
-                state := conv_out_address_set
+                state := conv_wr_addr_set
             }
             // standard case: done with an input map
             .otherwise {
@@ -256,12 +256,12 @@ class LayerConv() extends Layer {
                 // set center of next in map
                 in_addr := (y * w * input_depth.asSInt + (x + 1.S) * input_depth.asSInt + z.asSInt).asUInt + in_offset
                 // state transition
-                state := conv_out_address_set
+                state := conv_wr_addr_set
             }
         }
-        is(conv_out_address_set) {
+        is(conv_wr_addr_set) {
             out_addr := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt).asUInt + out_offset
-            state := conv_addr_set
+            state := conv_rd_addr_set
         }
         is(conv_done) {
             when (io.ack) {
