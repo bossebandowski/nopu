@@ -30,7 +30,7 @@ class LayerConv() extends Layer {
 
     in_offset := ~even * layer_offset
     out_offset := even * layer_offset
-    std_rd_addr := (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
+    std_rd_addr := 0.U // (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
     /* ================================================= CMD HANDLING ============================================ */
 
     when (io.run && state === conv_idle) {
@@ -140,12 +140,12 @@ class LayerConv() extends Layer {
                 dy := dy + 1.S
                 
                 io.bram_rd_req := true.B
-                io.bram_rd_addr := (in_addr.asSInt + (-1.S) * input_depth.asSInt + (dy + 1.S) * w * input_depth.asSInt).asUInt
+                io.bram_rd_addr := .U // (in_addr.asSInt + (-1.S) * input_depth.asSInt + (dy + 1.S) * w * input_depth.asSInt).asUInt
             }
             .otherwise {
                 dx := dx + 1.S
                 io.bram_rd_req := true.B
-                io.bram_rd_addr := (in_addr.asSInt + (dx + 1.S) * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
+                io.bram_rd_addr := 0.U // (in_addr.asSInt + (dx + 1.S) * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
             }
         }
         is(conv_load_output) {
