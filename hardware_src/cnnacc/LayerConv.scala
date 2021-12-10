@@ -26,10 +26,11 @@ class LayerConv() extends Layer {
 
     val in_offset = Wire(UInt())
     val out_offset = Wire(UInt())
+    val std_rd_addr = Wire(UInt())
 
     in_offset := ~even * layer_offset
     out_offset := even * layer_offset
-
+    std_rd_addr := (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
     /* ================================================= CMD HANDLING ============================================ */
 
     when (io.run && state === conv_idle) {
@@ -118,13 +119,11 @@ class LayerConv() extends Layer {
                 ws(6) := io.sram_rd_buffer(2)(31, 24).asSInt
                 ws(7) := io.sram_rd_buffer(2)(23, 16).asSInt
                 ws(8) := io.sram_rd_buffer(2)(15, 8).asSInt
-                state := conv_rd_addr_set
+                
+                io.bram_rd_req := true.B
+                io.bram_rd_addr := std_rd_addr
+                state := conv_load_input
             }
-        }
-        is(conv_rd_addr_set) {
-            io.bram_rd_req := true.B
-            io.bram_rd_addr := (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
-            state := conv_load_input
         }
         is(conv_load_input) {
             in_map(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt) := io.bram_rd_data
@@ -139,11 +138,14 @@ class LayerConv() extends Layer {
             .elsewhen (dx === 1.S && dy < 1.S) {
                 dx := -1.S
                 dy := dy + 1.S
-                state := conv_rd_addr_set
+                
+                io.bram_rd_req := true.B
+                io.bram_rd_addr := (in_addr.asSInt + (-1.S) * input_depth.asSInt + (dy + 1.S) * w * input_depth.asSInt).asUInt
             }
             .otherwise {
                 dx := dx + 1.S
-                state := conv_rd_addr_set
+                io.bram_rd_req := true.B
+                io.bram_rd_addr := (in_addr.asSInt + (dx + 1.S) * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
             }
         }
         is(conv_load_output) {
@@ -261,7 +263,9 @@ class LayerConv() extends Layer {
         }
         is(conv_wr_addr_set) {
             out_addr := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt).asUInt + out_offset
-            state := conv_rd_addr_set
+            io.bram_rd_req := true.B
+            io.bram_rd_addr := std_rd_addr
+            state := conv_load_input
         }
         is(conv_done) {
             when (io.ack) {
