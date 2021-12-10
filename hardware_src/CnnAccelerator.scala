@@ -170,13 +170,13 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
     // BRAM requests from layer components
     when (conv_layer.io.bram_rd_req) {
-        bram.io.rdAddr := 0.U // conv_layer.io.bram_rd_addr
+        bram.io.rdAddr := conv_layer.io.bram_rd_addr
     }
     .elsewhen (pool_layer.io.bram_rd_req) {
-        bram.io.rdAddr := 0.U // pool_layer.io.bram_rd_addr
+        bram.io.rdAddr := pool_layer.io.bram_rd_addr
     }
     .elsewhen (fc_layer.io.bram_rd_req) {
-        bram.io.rdAddr := 0.U // fc_layer.io.bram_rd_addr
+        bram.io.rdAddr := fc_layer.io.bram_rd_addr
     }
 
     when (conv_layer.io.bram_wr_req) {
