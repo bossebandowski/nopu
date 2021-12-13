@@ -28,10 +28,30 @@ class LayerConv() extends Layer {
     val in_offset = Wire(UInt())
     val out_offset = Wire(UInt())
     val std_rd_addr = Wire(UInt())
+    val dx_inc = Wire(SInt())
+    val dy_inc = Wire(SInt())
+    val std_rd_addr_inc = Wire(UInt())
+
+    // calculate next dx and next dy in advance to set bram address early and avoid long combinational logic chains
+    when (dx === 1.S) {
+        dx_inc := -1.S
+    }
+    .otherwise {
+        dx_inc := dx + 1.S
+    }
+
+    when (dy < 1.S && dx === 1.S) {
+        dy_inc := dy + 1.S
+    }
+    .otherwise {
+        dy_inc := dy
+    }
 
     in_offset := ~even * layer_offset
     out_offset := even * layer_offset
     std_rd_addr := (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
+    std_rd_addr_inc := (in_addr.asSInt + dx_inc * input_depth.asSInt + dy_inc * w * input_depth.asSInt).asUInt
+
     /* ================================================= CMD HANDLING ============================================ */
 
     when (io.run && state === conv_idle) {
@@ -123,11 +143,13 @@ class LayerConv() extends Layer {
                 
                 io.bram_rd_req := true.B
                 io.bram_rd_addr := std_rd_addr
+                bram_addr_reg := std_rd_addr_inc
                 state := conv_load_input
             }
         }
         is(conv_load_input) {
             in_map(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt) := io.bram_rd_data
+            bram_addr_reg := std_rd_addr_inc
 
             when(dx === 1.S && dy === 1.S) {
                 state := conv_load_output
@@ -154,26 +176,25 @@ class LayerConv() extends Layer {
             state := conv_apply_filter
         }
         is(conv_apply_filter) {
-            outs(0) := outs(0) + ws(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt) * in_map(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt)
+            outs(1) := ws(0) * in_map(0)
+            outs(2) := ws(1) * in_map(1)
+            outs(3) := ws(2) * in_map(2)
+            outs(4) := ws(3) * in_map(3)
+            outs(5) := ws(4) * in_map(4)
+            outs(6) := ws(5) * in_map(5)
+            outs(7) := ws(6) * in_map(6)
+            outs(8) := ws(7) * in_map(7)
+            outs(9) := ws(8) * in_map(8)
+            state := conv_sum_output
+        }
+        is(conv_sum_output) {
+            outs(0) := outs(0) + outs(1) + outs(2) + outs(3) + outs(4) + outs(5) + outs(6) + outs(7) + outs(8) + outs(9)
 
-            when(dx === 1.S && dy === 1.S) {
-                dx := -1.S
-                dy := -1.S
-                when(z < input_depth - 1.U) {
-                    state := conv_write_output
-                }
-                .otherwise {
-                    state := conv_add_bias
-                }
+            when(z < input_depth - 1.U) {
+                state := conv_write_output
             }
             .otherwise {
-                when (dx === 1.S && dy < 1.S) {
-                    dx := -1.S
-                    dy := dy + 1.S
-                }
-                .otherwise {
-                    dx := dx + 1.S
-                }
+                state := conv_add_bias
             }
         }
         is(conv_add_bias) {
@@ -266,6 +287,7 @@ class LayerConv() extends Layer {
             out_addr := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt).asUInt + out_offset
             io.bram_rd_req := true.B
             io.bram_rd_addr := std_rd_addr
+            bram_addr_reg := std_rd_addr_inc
             state := conv_load_input
         }
         is(conv_done) {

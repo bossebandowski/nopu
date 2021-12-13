@@ -52,7 +52,7 @@ void run_emulator() {
     load_nn_cifar_10();
     load_img();
 
-    for (int id = 0; id < 10; id++) {
+    for (int id = 0; id < 1; id++) {
         for (int idx = 0; idx < IMAGE_LEN; idx ++) {
             img[idx] = images[id][idx];
         }
@@ -65,6 +65,7 @@ void run_emulator() {
     printf("================================\n");
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
 
+    print_intermediate_layer_head(true, 0, 100);
 }
 
 int main(int argc, char **argv)
