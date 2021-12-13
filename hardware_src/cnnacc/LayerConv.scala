@@ -249,10 +249,8 @@ class LayerConv() extends Layer {
                 // set center of next in map
                 in_addr := ((y + 1.S) * w * input_depth.asSInt + input_depth.asSInt + z.asSInt).asUInt + in_offset
 
-                out_addr := (y * output_depth.asSInt * (w - filter_size + 1.S) + count_a.asSInt).asUInt + out_offset
-                io.bram_rd_req := true.B
-                io.bram_rd_addr := std_rd_addr
-                state := conv_load_input
+                // state transition
+                state := conv_wr_addr_set
             }
             // standard case: done with an input map
             .otherwise {
@@ -261,11 +259,14 @@ class LayerConv() extends Layer {
                 // set center of next in map
                 in_addr := (y * w * input_depth.asSInt + (x + 1.S) * input_depth.asSInt + z.asSInt).asUInt + in_offset
                 // state transition
-                out_addr := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + x * output_depth.asSInt + count_a.asSInt).asUInt + out_offset
-                io.bram_rd_req := true.B
-                io.bram_rd_addr := std_rd_addr
-                state := conv_load_input
+                state := conv_wr_addr_set
             }
+        }
+        is(conv_wr_addr_set) {
+            out_addr := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt).asUInt + out_offset
+            io.bram_rd_req := true.B
+            io.bram_rd_addr := std_rd_addr
+            state := conv_load_input
         }
         is(conv_done) {
             when (io.ack) {
