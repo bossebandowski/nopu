@@ -24,8 +24,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     // BRAM memory and default assignments
     val bram = Module(new BramControl())
     bram.io.wrEna := false.B
-    bram.io.wrAddr := 0.U //  0.U
-    bram.io.wrData := 0.S //  0.S
+    bram.io.wrAddr := 0.U
+    bram.io.wrData := 0.S
     bram.io.rdAddr := 0.U
     val layer_offset = scala.math.pow(2,14).toInt.U
 
@@ -170,29 +170,29 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
     // BRAM requests from layer components
     when (conv_layer.io.bram_rd_req) {
-        bram.io.rdAddr := 0.U //conv_layer.io.bram_rd_addr
+        bram.io.rdAddr := conv_layer.io.bram_rd_addr
     }
     .elsewhen (pool_layer.io.bram_rd_req) {
-        bram.io.rdAddr := 0.U //pool_layer.io.bram_rd_addr
+        bram.io.rdAddr := pool_layer.io.bram_rd_addr
     }
     .elsewhen (fc_layer.io.bram_rd_req) {
-        bram.io.rdAddr := 0.U //fc_layer.io.bram_rd_addr
+        bram.io.rdAddr := fc_layer.io.bram_rd_addr
     }
 
     when (conv_layer.io.bram_wr_req) {
         bram.io.wrEna := true.B
-        bram.io.wrAddr := 0.U //  conv_layer.io.bram_wr_addr
-        bram.io.wrData := 0.S //  conv_layer.io.bram_wr_data
+        bram.io.wrAddr := conv_layer.io.bram_wr_addr
+        bram.io.wrData := conv_layer.io.bram_wr_data
     }
     .elsewhen(pool_layer.io.bram_wr_req) {
         bram.io.wrEna := true.B
-        bram.io.wrAddr := 0.U //  pool_layer.io.bram_wr_addr
-        bram.io.wrData := 0.S //  pool_layer.io.bram_wr_data
+        bram.io.wrAddr := pool_layer.io.bram_wr_addr
+        bram.io.wrData := pool_layer.io.bram_wr_data
     }
     .elsewhen(fc_layer.io.bram_wr_req) {
         bram.io.wrEna := true.B
-        bram.io.wrAddr := 0.U //  fc_layer.io.bram_wr_addr
-        bram.io.wrData := 0.S //  fc_layer.io.bram_wr_data
+        bram.io.wrAddr := fc_layer.io.bram_wr_addr
+        bram.io.wrData := fc_layer.io.bram_wr_data
     }
 
 
@@ -242,8 +242,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 is(FUNC_LOAD_IMG) {
                     when(isIdle) {
                         bram.io.wrEna := true.B
-                        bram.io.wrAddr := 0.U //  io.copIn.opData(0).asUInt
-                        bram.io.wrData := 0.S //  io.copIn.opData(1).asSInt
+                        bram.io.wrAddr := io.copIn.opData(0).asUInt
+                        bram.io.wrData := io.copIn.opData(1).asSInt
                         emulator := false.B
                     }
                 }
@@ -345,8 +345,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             .otherwise {
                 when (emulator_count < BURST_LENGTH.U) {
                     bram.io.wrEna := true.B
-                    bram.io.wrAddr := 0.U //  outAddr
-                    bram.io.wrData := 0.S //  emulator_input(emulator_count)
+                    bram.io.wrAddr := outAddr
+                    bram.io.wrData := emulator_input(emulator_count)
 
                     emulator_count := emulator_count + 1.U
                     outAddr := outAddr + 1.U
@@ -457,8 +457,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
 
             when(outCount < maxOut + 16.U) {
                 bram.io.wrEna := true.B
-                bram.io.wrAddr := 0.U //  outAddr
-                bram.io.wrData := 0.S //  0.S
+                bram.io.wrAddr := outAddr
+                bram.io.wrData := 0.S
                 
                 outCount := outCount + 1.U
                 outAddr := outAddr + 1.U
@@ -515,8 +515,8 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             */
             when(outCount < layer_meta_s_o(layer) + 16.U) {
                 bram.io.wrEna := true.B
-                bram.io.wrAddr := 0.U //  outAddr
-                bram.io.wrData := 0.S //  0.S
+                bram.io.wrAddr := outAddr
+                bram.io.wrData := 0.S
                 
                 outCount := outCount + 1.U
                 outAddr := outAddr + 1.U
