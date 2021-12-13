@@ -420,7 +420,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             conv_layer.io.even := ~layer(0)
 
             when(conv_layer.io.state === conv_done) {
-                stateReg := idle // set_offset
+                stateReg := set_offset
                 conv_layer.io.ack := true.B
             }
         }
