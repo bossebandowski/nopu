@@ -9,6 +9,7 @@ import cnnacc.Config._
 
 class LayerMaxPool() extends Layer {
 
+    // registers
     val filter3x3 = Reg(Vec(9, SInt(DATA_WIDTH.W)))
     val in_map = Reg(Vec(9, SInt(DATA_WIDTH.W)))
 
@@ -25,11 +26,72 @@ class LayerMaxPool() extends Layer {
     val cur_max = RegInit(ABS_MIN.S(DATA_WIDTH.W))
     val addr_reg = RegInit(0.U(DATA_WIDTH.W))
 
+    // aux wires
     val in_offset = Wire(UInt())
     val out_offset = Wire(UInt())
 
+    // wires for calculating read and write addresses ahead of time
+    val x_inc = Wire(SInt())
+    val y_inc = Wire(SInt())
+    val dx_inc = Wire(SInt())
+    val dy_inc = Wire(SInt())
+    val wr_addr = Wire(UInt())
+    val rd_addr = Wire(UInt())
+    val rd_addr_inc_mask = Wire(UInt())
+    val rd_addr_inc_conv = Wire(UInt())
+
+    // state wires
+    val done_with_mask = Wire(Bool())
+    val done_with_conv = Wire(Bool())
+    val done_with_layer = Wire(Bool())
+    val done_with_row = Wire(Bool())
+    val done_with_dxs = Wire(Bool())
+
+    done_with_mask := dx === filter_size - 1.S && dy === filter_size - 1.S
+    done_with_conv := x === output_depth.asSInt && y === output_depth.asSInt
+    done_with_layer := count_a === input_depth - 1.U
+    done_with_row := x === output_depth.asSInt && y < output_depth.asSInt
+    done_with_dxs := dx === filter_size - 1.S && dy < filter_size - 1.S
+
+
+    // input and output locations in BRAM depend on whether the layer has an even index or not
     in_offset := ~even * layer_offset
     out_offset := even * layer_offset
+
+    // calculate next dx and dy
+    when (done_with_mask) {
+        dx_inc := 0.S
+        dy_inc := 0.S    
+    }
+    .elsewhen (done_with_dxs) {
+        dx_inc := 0.S
+        dy_inc := dy + 1.S
+    }
+    .otherwise {
+        dx_inc := dx + 1.S
+        dy_inc := dy
+    }
+
+    // calculate next x and y
+    when (done_with_conv) {
+        x_inc := 0.S
+        y_inc := 0.S
+    }
+    .elsewhen(done_with_row) {
+        x_inc := 0.S
+        y_inc := y + 1.S
+    }
+    .otherwise {
+        x_inc := x + 1.S
+        y_inc := y
+    }
+
+    // standard write and read addresses
+    wr_addr := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + count_a.asSInt).asUInt + out_offset
+    rd_addr := ((stride_length * y + dy) * input_depth.asSInt * w + (stride_length * x + dx) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
+    // read address of next cycle
+    rd_addr_inc_mask := ((stride_length * y + dy_inc) * input_depth.asSInt * w + (stride_length * x + dx_inc) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
+    rd_addr_inc_conv := ((stride_length * y_inc) * input_depth.asSInt * w + (stride_length * x_inc) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
 
     /* ================================================= CMD HANDLING ============================================ */
 
@@ -59,14 +121,11 @@ class LayerMaxPool() extends Layer {
             cur_max := ABS_MIN.S
             count_a := 0.U
 
-            state := pool_in_addr_set
+            addr_reg := rd_addr
+            state := pool_rd_addr_set
 
         }
-        is(pool_in_addr_set) {
-            addr_reg := ((stride_length * y + dy) * input_depth.asSInt * w + (stride_length * x + dx) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
-            state := pool_rd_delay
-        }
-        is(pool_rd_delay) {
+        is(pool_rd_addr_set) {
             io.bram_rd_req := true.B
             io.bram_rd_addr := addr_reg
             state := pool_find_max
@@ -76,26 +135,17 @@ class LayerMaxPool() extends Layer {
                 cur_max := io.bram_rd_data
             }
 
-            when (dx === filter_size - 1.S && dy === filter_size - 1.S) {
-                dx := 0.S
-                dy := 0.S                
-                state := pool_wr_delay
-            }
-            .elsewhen (dx === filter_size - 1.S && dy < filter_size - 1.S) {
-                dx := 0.S
-                dy := dy + 1.S
+            dx := dx_inc
+            dy := dy_inc
 
-                state := pool_in_addr_set
+            when (done_with_mask) {
+                addr_reg := wr_addr
+                state := pool_write_output
             }
             .otherwise {
-                dx := dx + 1.S
-
-                state := pool_in_addr_set
+                addr_reg := rd_addr_inc_mask
+                state := pool_rd_addr_set
             }
-        }
-        is(pool_wr_delay) {
-            state := pool_write_output
-            addr_reg := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + count_a.asSInt).asUInt + out_offset
         }
         is(pool_write_output) {
 
@@ -104,25 +154,24 @@ class LayerMaxPool() extends Layer {
             io.bram_wr_addr := addr_reg
             cur_max := ABS_MIN.S
 
-            when (x === output_depth.asSInt && y === output_depth.asSInt) {
-                when (count_a < input_depth - 1.U) {
-                    x := 0.S
-                    y := 0.S
-                    count_a := count_a + 1.U
-                    state := pool_in_addr_set
+            x := x_inc
+            y := y_inc
+
+            when (done_with_conv) {
+                when (done_with_layer) {
+                    state := pool_done
+                    count_a := 0.U
                 }
                 .otherwise {
                     state := pool_done
+                    count_a := count_a + 1.U
+                    addr_reg := count_a.asUInt + in_offset
+                    state := pool_rd_addr_set
                 }
             }
-            .elsewhen(x === output_depth.asSInt && y < output_depth.asSInt) {
-                x := 0.S
-                y := y + 1.S
-                state := pool_in_addr_set
-            }
             .otherwise {
-                x := x + 1.S
-                state := pool_in_addr_set
+                addr_reg := rd_addr_inc_conv
+                state := pool_rd_addr_set
             }
         }
         is(pool_done) {

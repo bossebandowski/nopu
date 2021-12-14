@@ -16,7 +16,7 @@ object Config {
     // states CONV layer
     val conv_idle :: conv_done :: conv_init :: conv_load_filter :: conv_apply_filter :: conv_write_output :: conv_load_bias :: conv_add_bias :: conv_apply_relu :: conv_load_input :: conv_rd_addr_set :: conv_wr_addr_set :: conv_load_output :: conv_load_m :: conv_requantize :: conv_sum_output :: Nil = Enum(16)
     // states POOL layer
-    val pool_idle :: pool_done :: pool_init :: pool_in_addr_set :: pool_find_max :: pool_write_output :: pool_rd_delay :: pool_wr_delay :: Nil = Enum(8)
+    val pool_idle :: pool_done :: pool_init :: pool_rd_addr_set :: pool_find_max :: pool_write_output :: pool_rd_delay :: pool_wr_delay :: Nil = Enum(8)
     // states SRAM control
     val mem_idle :: mem_done :: mem_read_req :: mem_read :: mem_write_req :: mem_write :: Nil = Enum(6)
 

@@ -148,7 +148,7 @@ class LayerConv() extends Layer {
         }
         is(conv_load_filter) {
             bram_addr_reg := std_rd_addr
-            
+
             when (io.sram_idle) {
                 io.sram_rd_req := true.B
                 io.sram_addr := weight_addr
