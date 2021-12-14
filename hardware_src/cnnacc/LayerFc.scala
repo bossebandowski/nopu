@@ -8,22 +8,39 @@ import patmos.Constants._
 import cnnacc.Config._
 
 class LayerFc() extends Layer {
+    // useful constants
+    val w_inc = 16.U
+    val b_inc = 4.U
 
+    // registers
     val max_in = RegInit(0.U(DATA_WIDTH.W))
     val max_out = RegInit(0.U(DATA_WIDTH.W))
     val doing_bias = RegInit(false.B)
     val M = RegInit(0.U(DATA_WIDTH.W))
     val in_val = RegInit(0.S(DATA_WIDTH.W))
     val activation = RegInit(0.U(DATA_WIDTH.W))
-
+    
+    // wires
     val in_inc = Wire(UInt())
     val out_inc = Wire(UInt())
+    val wr_addr_rst = Wire(UInt())
 
-    val w_inc = 16.U
-    val b_inc = 4.U
+    val done_with_loading = Wire(Bool())
+    val done_with_writing = Wire(Bool())
+    val done_with_mac = Wire(Bool())
+    val done_with_input = Wire(Bool())
+
+
 
     in_inc := count_a + 1.U
     out_inc := count_b + w_inc
+    wr_addr_rst := even * layer_offset
+
+    done_with_loading := count_c === doing_bias * b_inc + ~doing_bias * w_inc
+    done_with_writing := ~(count_c < w_inc && count_b + count_c < max_out)
+    done_with_mac := in_inc === max_in && out_inc >= max_out
+    done_with_input := in_inc < max_in && out_inc >= max_out
+
     /* ================================================= CMD HANDLING ============================================ */
 
     when (io.run && state === fc_idle) {
@@ -34,10 +51,14 @@ class LayerFc() extends Layer {
 
     switch(state) {
         is(fc_idle) {
-            // do nothing
+            /*
+            do nothing
+            */
         }
         is(fc_init) {
-            // get config
+            /*
+            get input parameters from patmos, reset counts, set in and out addresses
+            */
             weight_addr := io.weight_addr
             bias_addr := io.bias_addr
             max_in := io.shape_in
@@ -53,16 +74,14 @@ class LayerFc() extends Layer {
             doing_bias := false.B
             state := fc_load_m
 
-            when (io.even) {
-                out_addr := layer_offset
-                in_addr := 0.U
-            }
-            .otherwise {
-                out_addr := 0.U
-                in_addr := layer_offset
-            }
+            out_addr := io.even * layer_offset
+            in_addr := ~io.even * layer_offset
+
         }
         is(fc_load_m) {
+            /*
+            load the requantization parameter m from sram
+            */
             when (io.sram_idle) {
                 io.sram_rd_req := true.B
                 io.sram_addr := sram_addr_reg
@@ -74,10 +93,16 @@ class LayerFc() extends Layer {
             }
         }
         is(fc_load_input) {
+            /*
+            load a single input from bram
+            */
             in_val := io.bram_rd_data
             state := fc_load_weight
         }
         is(fc_load_weight) {
+            /*
+            load weights from sram. A single SRAM burst delivers 4 words with 4 weights each, hence 16
+            */
             when (io.sram_idle) {
                 io.sram_rd_req := true.B
                 io.sram_addr := weight_addr
@@ -109,7 +134,10 @@ class LayerFc() extends Layer {
             }
         }
         is(fc_load_output) {
-            when (count_c === doing_bias * b_inc + ~doing_bias * w_inc) {
+            /*
+            load the current output value to accumulate the product of weights and input later
+            */
+            when (done_with_loading) {
                 when (doing_bias) {
                     state := fc_load_bias
                 }
@@ -127,6 +155,9 @@ class LayerFc() extends Layer {
             }
         }
         is(fc_mac) {
+            /*
+            calculate products of input and weights and add to outputs
+            */
             outs(0) := outs(0) + (in_val * ws(0))
             outs(1) := outs(1) + (in_val * ws(1))
             outs(2) := outs(2) + (in_val * ws(2))
@@ -147,31 +178,25 @@ class LayerFc() extends Layer {
             state := fc_write_output
         }
         is(fc_write_output) {
-            when (count_c < w_inc && count_b + count_c < max_out) {
-                io.bram_wr_req := true.B
-                io.bram_wr_addr := out_addr + count_c
-                io.bram_wr_data := outs(count_c)
-                count_c := count_c + 1.U
-            }
-            .otherwise {
+            /*
+            write output into bram. This takes a few cycles. after that handle transitions:
+            when done with all multiply accumulates, continue with biases
+            when done with all outputs for a single input, continue with next input
+            otherwise continue with the next outputs for the same input
+            */
+            when (done_with_writing) {
                 count_c := 0.U
 
-                when (in_inc === max_in && out_inc >= max_out) {
+                when (done_with_mac) {
                     count_b := 0.U
                     state := fc_load_output
                     doing_bias := true.B
                     io.bram_rd_req := true.B
+                    io.bram_rd_addr := wr_addr_rst
 
-                    when (even) {
-                        out_addr := layer_offset
-                        io.bram_rd_addr := layer_offset
-                    }
-                    .otherwise {
-                        out_addr := 0.U
-                        io.bram_rd_addr := 0.U
-                    }
+                    out_addr := wr_addr_rst
                 }
-                .elsewhen(in_inc < max_in && out_inc >= max_out) {
+                .elsewhen(done_with_input) {
 
                     count_a := count_a + 1.U
                     count_b := 0.U
@@ -181,15 +206,8 @@ class LayerFc() extends Layer {
                     io.bram_rd_req := true.B
                     io.bram_rd_addr := in_addr + 1.U
 
-
                     weight_addr := weight_addr + w_inc + max_out - out_inc
-
-                    when (even) {
-                        out_addr := layer_offset
-                    }
-                    .otherwise {
-                        out_addr := 0.U
-                    }
+                    out_addr := wr_addr_rst
                 }
                 .otherwise {
                     count_b := count_b + w_inc
@@ -198,8 +216,17 @@ class LayerFc() extends Layer {
                     state := fc_load_weight
                 }
             }
+            .otherwise {
+                io.bram_wr_req := true.B
+                io.bram_wr_addr := out_addr + count_c
+                io.bram_wr_data := outs(count_c)
+                count_c := count_c + 1.U
+            }
         }
         is(fc_load_bias) {
+            /*
+            load bias from sram. A single burst
+            */
             when (io.sram_idle) {
                 io.sram_rd_req := true.B
                 io.sram_addr := bias_addr
@@ -215,6 +242,9 @@ class LayerFc() extends Layer {
             }
         }
         is(fc_add_bias) {
+            /*
+            add outputs to activations
+            */
             state := activation
 
             outs(0) := bs(0) + outs(0)
@@ -225,6 +255,11 @@ class LayerFc() extends Layer {
             count_c := 0.U
         }
         is(fc_requantize) {
+            /*
+            requantize the output activations to avoid overflows.
+            Multiply the outputs with the m factor and perform a 32 bit shift.
+            This approximates a division
+            */
             state := fc_apply_relu
             tmp64(0) := (outs(0) * M.asSInt) >> 32.U
             tmp64(1) := (outs(1) * M.asSInt) >> 32.U
@@ -232,6 +267,9 @@ class LayerFc() extends Layer {
             tmp64(3) := (outs(3) * M.asSInt) >> 32.U
         }
         is(fc_apply_relu) {
+            /*
+            cap the output activations to 8-bit unsigned int range
+            */
             when (tmp64(0)(31, 0).asSInt < 0.S) {
                 outs(0) := 0.S
             }
@@ -275,6 +313,9 @@ class LayerFc() extends Layer {
             state := fc_write_bias
         }
         is(fc_write_bias) {
+            /*
+            write outputs back into bram after adding biases
+            */
             when (count_c < BURST_LENGTH.U) {
                 io.bram_wr_req := true.B
                 io.bram_wr_addr := out_addr + count_c
@@ -299,6 +340,9 @@ class LayerFc() extends Layer {
             }
         }
         is(fc_done) {
+            /*
+            done. wait for ack from patmos return to idle state
+            */
             when (io.ack) {
                 state := fc_idle
             }
