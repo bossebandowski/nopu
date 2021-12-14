@@ -30,9 +30,12 @@ class LayerConv() extends Layer {
     val std_rd_addr = Wire(UInt())
     val dx_inc = Wire(SInt())
     val dy_inc = Wire(SInt())
+    val dx_two_inc = Wire(SInt())
+    val dy_two_inc = Wire(SInt())
     val std_rd_addr_inc = Wire(UInt())
+    val std_rd_addr_two_inc = Wire(UInt())
 
-    // calculate next dx and next dy in advance to set bram address early and avoid long combinational logic chains
+    // calculate dx and dy one cycle ahead
     when (dx === 1.S) {
         dx_inc := -1.S
     }
@@ -47,10 +50,29 @@ class LayerConv() extends Layer {
         dy_inc := dy
     }
 
+    // calculate dx and dy two cycles ahead
+    when (dx === -1.S) {
+        dx_two_inc := 1.S
+    }
+    .elsewhen (dx === 0.S) {
+        dx_two_inc := -1.S
+    }
+    .otherwise {
+        dx_two_inc := 0.S
+    }
+
+    when (dy < 1.S && dx >= 0.S) {
+        dy_two_inc := dy + 1.S
+    }
+    .otherwise {
+        dy_two_inc := dy
+    }
+
     in_offset := ~even * layer_offset
     out_offset := even * layer_offset
     std_rd_addr := (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
     std_rd_addr_inc := (in_addr.asSInt + dx_inc * input_depth.asSInt + dy_inc * w * input_depth.asSInt).asUInt
+    std_rd_addr_two_inc := (in_addr.asSInt + dx_two_inc * input_depth.asSInt + dy_two_inc * w * input_depth.asSInt).asUInt
 
     /* ================================================= CMD HANDLING ============================================ */
 
@@ -125,6 +147,8 @@ class LayerConv() extends Layer {
             }
         }
         is(conv_load_filter) {
+            bram_addr_reg := std_rd_addr
+            
             when (io.sram_idle) {
                 io.sram_rd_req := true.B
                 io.sram_addr := weight_addr
@@ -142,14 +166,14 @@ class LayerConv() extends Layer {
                 ws(8) := io.sram_rd_buffer(2)(15, 8).asSInt
                 
                 io.bram_rd_req := true.B
-                io.bram_rd_addr := std_rd_addr
+                io.bram_rd_addr := bram_addr_reg
                 bram_addr_reg := std_rd_addr_inc
                 state := conv_load_input
             }
         }
         is(conv_load_input) {
             in_map(((dx + 1.S) + (dy + 1.S) * filter_size).asUInt) := io.bram_rd_data
-            bram_addr_reg := std_rd_addr_inc
+            bram_addr_reg := std_rd_addr_two_inc
 
             when(dx === 1.S && dy === 1.S) {
                 state := conv_apply_filter
@@ -163,12 +187,12 @@ class LayerConv() extends Layer {
                 dy := dy + 1.S
                 
                 io.bram_rd_req := true.B
-                io.bram_rd_addr := (in_addr.asSInt + (-1.S) * input_depth.asSInt + (dy + 1.S) * w * input_depth.asSInt).asUInt
+                io.bram_rd_addr := bram_addr_reg
             }
             .otherwise {
                 dx := dx + 1.S
                 io.bram_rd_req := true.B
-                io.bram_rd_addr := (in_addr.asSInt + (dx + 1.S) * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
+                io.bram_rd_addr := bram_addr_reg
             }
         }
         is(conv_apply_filter) {
@@ -269,6 +293,7 @@ class LayerConv() extends Layer {
 
                 // state transition
                 state := conv_wr_addr_set
+                bram_addr_reg := std_rd_addr_inc
             }
             // standard case: done with an input map
             .otherwise {
@@ -278,12 +303,13 @@ class LayerConv() extends Layer {
                 in_addr := (y * w * input_depth.asSInt + (x + 1.S) * input_depth.asSInt + z.asSInt).asUInt + in_offset
                 // state transition
                 state := conv_wr_addr_set
+                bram_addr_reg := std_rd_addr_inc
             }
         }
         is(conv_wr_addr_set) {
             out_addr := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt).asUInt + out_offset
             io.bram_rd_req := true.B
-            io.bram_rd_addr := std_rd_addr
+            io.bram_rd_addr := bram_addr_reg
             bram_addr_reg := std_rd_addr_inc
             state := conv_load_input
         }

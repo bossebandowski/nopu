@@ -16,15 +16,6 @@ void load_img()
     cop_config(0, 7, &img[0]);
 }
 
-void read_raw_outputs()
-{
-    for (int i = 0; i < 10; i++)
-    {
-        cop_mem_r(i);
-        printf("%d: %lx\n", i, cop_get_res());
-    }
-}
-
 void print_intermediate_layer_head(bool even, int offset, int count)
 {
     for (int i = 0; i < count; i++)
@@ -65,7 +56,7 @@ void run_emulator() {
     printf("================================\n");
     printf("gross execution time per inference (including img load): %d\n", hwExecTime);
 
-    // print_intermediate_layer_head(true, 0, 100);
+    print_intermediate_layer_head(true, 90, 10);
 }
 
 int main(int argc, char **argv)
