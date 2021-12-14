@@ -361,6 +361,10 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(layer_done) {
+            /*
+            done with a single layer. check if we have reached the last layer. If yes, extract max.
+            Otherwise, continue with next layer
+            */
             when (layer === num_layers - 1.U) {   // when we have reached the last layer
                 stateReg := read_output             // get ready to extract max
                 curMax := ABS_MIN.S                 // set curmax to low value
@@ -381,6 +385,9 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(next_layer) {
+            /*
+            depending on the network config, send a run command to the corresponding hardware
+            */
             switch(layer_meta_t(layer)) {
                 is (fc) {
                     stateReg := fc
@@ -397,6 +404,10 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(fc) {
+            /*
+            waiting for fc layer to finish. Provide config data.
+            When done, send ack
+            */
             fc_layer.io.activation := layer_meta_a(layer)
             fc_layer.io.weight_addr := layer_meta_w(layer)
             fc_layer.io.bias_addr := layer_meta_b(layer)
@@ -411,6 +422,10 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(conv) {
+            /*
+            waiting for conv layer to finish. Provide config data.
+            When done, send ack
+            */
             conv_layer.io.activation := layer_meta_a(layer)
             conv_layer.io.weight_addr := layer_meta_w(layer)
             conv_layer.io.bias_addr := layer_meta_b(layer)
@@ -425,6 +440,10 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(pool) {
+            /*
+            waiting for pool layer to finish. Provide config data.
+            When done, send ack
+            */
             pool_layer.io.shape_in := layer_meta_s_i(layer)
             pool_layer.io.shape_out := layer_meta_s_o(layer)
             pool_layer.io.m_factor := layer_meta_m(layer)
@@ -436,6 +455,9 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(set_offset) {
+            /*
+            get ready to flush outdated input layer from bram.
+            */
             stateReg := clear_layer
             outCount := 0.U
 
@@ -454,7 +476,9 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             }
         }
         is(clear_layer) {
-
+            /*
+            flush outdated input layer from bram
+            */
             when(outCount < maxOut + 16.U) {
                 bram.io.wrEna := true.B
                 bram.io.wrAddr := outAddr
