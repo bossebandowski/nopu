@@ -103,10 +103,14 @@ class LayerMaxPool() extends Layer {
 
     switch(state) {
         is(pool_idle) {
-            // do nothing
+            /*
+            do nothing
+            */
         }
         is(pool_init) {
-            // get config
+            /*
+            get config from patmos, reset counts, and set read address
+            */
             w := io.shape_in(31, 24).asSInt
             filter_size := io.shape_in(23, 20).asSInt
             stride_length := io.shape_in(19, 16).asSInt
@@ -126,11 +130,18 @@ class LayerMaxPool() extends Layer {
 
         }
         is(pool_rd_addr_set) {
+            /*
+            set bram address for read in next cycle
+            */
             io.bram_rd_req := true.B
             io.bram_rd_addr := addr_reg
             state := pool_find_max
         }
         is(pool_find_max) {
+            /*
+            find the maximum value in a given 2x2 region (or other filter sizes).
+            Iterate over all inputs and update the maximum if a larger value appears on the BRAM data line
+            */
             when(io.bram_rd_data > cur_max) {
                 cur_max := io.bram_rd_data
             }
@@ -148,7 +159,13 @@ class LayerMaxPool() extends Layer {
             }
         }
         is(pool_write_output) {
-
+            /*
+            write maximum value int bram.
+            transitions:
+                when done with the layer, transition to "done" state
+                when done with a convolution, repeat the loop for the next input convolution
+                when done with an xy pair, move on to the next coordinates in the current convolution
+            */
             io.bram_wr_req := true.B
             io.bram_wr_data := cur_max
             io.bram_wr_addr := addr_reg
@@ -175,6 +192,9 @@ class LayerMaxPool() extends Layer {
             }
         }
         is(pool_done) {
+            /*
+            done. wait for ack from patmos return to idle state
+            */
             when (io.ack) {
                 state := pool_idle
             }
