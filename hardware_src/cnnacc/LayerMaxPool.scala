@@ -25,6 +25,7 @@ class LayerMaxPool() extends Layer {
     val stride_length = RegInit(0.S(8.W))
     val cur_max = RegInit(ABS_MIN.S(DATA_WIDTH.W))
     val addr_reg = RegInit(0.U(DATA_WIDTH.W))
+    val timing_aux_regs = Reg(Vec(10, UInt(DATA_WIDTH.W)))
 
     // aux wires
     val in_offset = Wire(UInt())
@@ -85,11 +86,22 @@ class LayerMaxPool() extends Layer {
         y_inc := y
     }
 
+    // a few timing aux regs to prevent timing issues during bram address setting
+    timing_aux_regs(0) := count_a + out_offset
+    timing_aux_regs(1) := count_a + in_offset
+    timing_aux_regs(2) := y.asUInt * input_depth * output_depth
+    timing_aux_regs(3) := x.asUInt * input_depth
+    timing_aux_regs(4) := input_depth * w.asUInt
+    timing_aux_regs(5) := (stride_length * y).asUInt
+    timing_aux_regs(6) := (stride_length * x).asUInt
+    timing_aux_regs(7) := timing_aux_regs(5) * timing_aux_regs(4) 
+
+
     // standard write and read addresses
-    wr_addr := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + count_a.asSInt).asUInt + out_offset
+    wr_addr := timing_aux_regs(0) + timing_aux_regs(2) + timing_aux_regs(3)
     // read address of next cycle
-    rd_addr_inc_mask := ((stride_length * y + dy_inc) * input_depth.asSInt * w + (stride_length * x + dx_inc) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
-    rd_addr_inc_conv := ((stride_length * y_inc) * input_depth.asSInt * w + (stride_length * x_inc) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
+    rd_addr_inc_mask := (timing_aux_regs(5).asSInt * timing_aux_regs(4).asSInt + dy_inc * timing_aux_regs(4).asSInt + (timing_aux_regs(6).asSInt + dx_inc) * input_depth.asSInt).asUInt + timing_aux_regs(1)
+    rd_addr_inc_conv := ((stride_length * y_inc) * timing_aux_regs(4).asSInt + (stride_length * x_inc) * input_depth.asSInt).asUInt + timing_aux_regs(1)
 
     /* ================================================= CMD HANDLING ============================================ */
 
