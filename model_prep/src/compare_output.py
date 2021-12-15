@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
     ef_0 = 0
 
-    while not "0:" in ef_lines[ef_0][:2]:
+    while not "0 " in ef_lines[ef_0][:2]:
         ef_0 += 1
 
     ef_lines = ef_lines[ef_0:]

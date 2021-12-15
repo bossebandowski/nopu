@@ -24,6 +24,8 @@ class LayerConv() extends Layer {
     val output_depth = RegInit(0.U(8.W))
     val stride_length = RegInit(0.S(8.W))
     val bram_addr_reg = RegInit(0.U(DATA_WIDTH.W))
+    val input_center = RegInit(0.U(DATA_WIDTH.W))
+    val input_center_inc_reg = RegInit(0.U(DATA_WIDTH.W))
 
     // aux wires
     val in_offset = Wire(UInt())
@@ -40,9 +42,10 @@ class LayerConv() extends Layer {
     val wr_addr_std = Wire(UInt())
     val rd_addr_std = Wire(UInt())
     val rd_addr_inc_ds = Wire(UInt())
-    val rd_addr_inc_xy = Wire(UInt())
+    val input_center_inc = Wire(UInt())
+    val rd_addr_inc_region = Wire(UInt())
     val rd_addr_inc_z = Wire(UInt())
-    val rd_addr_rst = Wire(UInt())
+    val input_center_rst = Wire(UInt())
     val rd_addr_two_inc = Wire(UInt())
     val m_address = Wire(UInt())
 
@@ -107,6 +110,9 @@ class LayerConv() extends Layer {
         y_inc := y
     }
 
+    // calculate in address (center of input map) one cycle ahead
+    input_center_inc_reg := input_center_inc
+
     // input and output locations in BRAM depend on whether the layer has an even index or not
     in_offset := ~even * layer_offset
     out_offset := even * layer_offset
@@ -114,17 +120,19 @@ class LayerConv() extends Layer {
     // write address
     wr_addr_std := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt).asUInt + out_offset
     // read address
-    rd_addr_std := (in_addr.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
+    rd_addr_std := (input_center.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
     // read address next cycle within region
-    rd_addr_inc_ds := (in_addr.asSInt + dx_inc * input_depth.asSInt + dy_inc * w * input_depth.asSInt).asUInt
-    // read address next cycle in new region (i.e. when done with mask)
-    rd_addr_inc_xy := (y_inc * w * input_depth.asSInt + x_inc * input_depth.asSInt + z.asSInt).asUInt + in_offset
+    rd_addr_inc_ds := (input_center.asSInt + dx_inc * input_depth.asSInt + dy_inc * w * input_depth.asSInt).asUInt
+    // read address next cycle in new region
+    rd_addr_inc_region := (input_center_inc_reg.asSInt - input_depth.asSInt - w * input_depth.asSInt).asUInt
+    // center in new region in next cycle (i.e. when done with mask)
+    input_center_inc := (y_inc * w * input_depth.asSInt + x_inc * input_depth.asSInt + z.asSInt).asUInt + in_offset
     // read address next cycle in new input convolution
     rd_addr_inc_z := ((w + 1.S) * input_depth.asSInt + z.asSInt + 1.S).asUInt + in_offset
     // read address after reset
-    rd_addr_rst := ((w + 1.S) * input_depth.asSInt).asUInt + in_offset
+    input_center_rst := ((w + 1.S) * input_depth.asSInt).asUInt + in_offset
     // read address in two cycles
-    rd_addr_two_inc := (in_addr.asSInt + dx_two_inc * input_depth.asSInt + dy_two_inc * w * input_depth.asSInt).asUInt
+    rd_addr_two_inc := (input_center.asSInt + dx_two_inc * input_depth.asSInt + dy_two_inc * w * input_depth.asSInt).asUInt
     // address of requantization factor m
     m_address := ((io.shape_in(31, 24).asSInt + 1.S) * io.shape_in(15, 8)).asUInt + ~io.even * layer_offset
 
@@ -170,7 +178,7 @@ class LayerConv() extends Layer {
 
             state := conv_load_m
 
-            in_addr := m_address
+            input_center := m_address
             out_addr := io.even * layer_offset
         }
         is(conv_load_m) {
@@ -348,21 +356,21 @@ class LayerConv() extends Layer {
                     .otherwise {
                         bias_addr := bias_addr + 4.U                            // otherwise increment bias address
                         count_a := count_a + 1.U                                // increment filter count
-                        in_addr := rd_addr_rst                                  // reset read address
+                        input_center := input_center_rst                        // reset read address
                         out_addr := count_a + 1.U + out_offset                  // set out address
                         state := conv_load_bias
                     }
                 }
                 .otherwise {                                                    // not done with filter, just get ready for next convolution
                     z := z + 1.U                                                // increment convolution id
-                    in_addr := rd_addr_inc_z                                    // set read address
+                    input_center := rd_addr_inc_z                               // set read address
                     out_addr := count_a + out_offset                            // set write address
                     state := conv_load_filter                                   // load next filter layer
                 }                    
             }
             .otherwise {                                                        // just continue with current 2d slice of input
-                in_addr := rd_addr_inc_xy                                       // set read address
-                bram_addr_reg := rd_addr_inc_ds                                 // prepare read address for next cycle
+                input_center := input_center_inc                                // set read address
+                bram_addr_reg := rd_addr_inc_region                             // prepare read address for next cycle
                 state := conv_wr_addr_set
             }
         }

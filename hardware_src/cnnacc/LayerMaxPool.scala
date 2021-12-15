@@ -36,7 +36,6 @@ class LayerMaxPool() extends Layer {
     val dx_inc = Wire(SInt())
     val dy_inc = Wire(SInt())
     val wr_addr = Wire(UInt())
-    val rd_addr = Wire(UInt())
     val rd_addr_inc_mask = Wire(UInt())
     val rd_addr_inc_conv = Wire(UInt())
 
@@ -88,7 +87,6 @@ class LayerMaxPool() extends Layer {
 
     // standard write and read addresses
     wr_addr := (y * input_depth.asSInt * output_depth.asSInt + x * input_depth.asSInt + count_a.asSInt).asUInt + out_offset
-    rd_addr := ((stride_length * y + dy) * input_depth.asSInt * w + (stride_length * x + dx) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
     // read address of next cycle
     rd_addr_inc_mask := ((stride_length * y + dy_inc) * input_depth.asSInt * w + (stride_length * x + dx_inc) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
     rd_addr_inc_conv := ((stride_length * y_inc) * input_depth.asSInt * w + (stride_length * x_inc) * input_depth.asSInt + count_a.asSInt).asUInt + in_offset
@@ -125,9 +123,8 @@ class LayerMaxPool() extends Layer {
             cur_max := ABS_MIN.S
             count_a := 0.U
 
-            addr_reg := rd_addr
+            addr_reg := ~io.even * layer_offset
             state := pool_rd_addr_set
-
         }
         is(pool_rd_addr_set) {
             /*
