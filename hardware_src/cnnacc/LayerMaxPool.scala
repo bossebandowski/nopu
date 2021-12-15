@@ -179,7 +179,7 @@ class LayerMaxPool() extends Layer {
                 .otherwise {
                     state := pool_done
                     count_a := count_a + 1.U
-                    addr_reg := count_a.asUInt + in_offset
+                    addr_reg := count_a.asUInt + in_offset + 1.U
                     state := pool_rd_addr_set
                 }
             }
