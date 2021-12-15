@@ -26,6 +26,7 @@ class LayerConv() extends Layer {
     val bram_addr_reg = RegInit(0.U(DATA_WIDTH.W))
     val input_center = RegInit(0.U(DATA_WIDTH.W))
     val input_center_inc_reg = RegInit(0.U(DATA_WIDTH.W))
+    val timing_aux_regs = Reg(Vec(10, UInt(DATA_WIDTH.W)))
 
     // aux wires
     val in_offset = Wire(UInt())
@@ -117,22 +118,28 @@ class LayerConv() extends Layer {
     in_offset := ~even * layer_offset
     out_offset := even * layer_offset
 
+    // a few timing aux regs to prevent timing issues during bram address setting
+    timing_aux_regs(0) := (output_depth.asSInt * (w - filter_size + 1.S)).asUInt
+    timing_aux_regs(1) := w.asUInt * input_depth
+    timing_aux_regs(2) := count_a + out_offset
+    timing_aux_regs(3) := z + in_offset
+
     // write address
-    wr_addr_std := ((y - 1.S) * output_depth.asSInt * (w - filter_size + 1.S) + (x - 1.S) * output_depth.asSInt + count_a.asSInt).asUInt + out_offset
+    wr_addr_std := ((y - 1.S) * timing_aux_regs(0).asUInt + (x - 1.S) * output_depth.asSInt).asUInt + timing_aux_regs(2)
     // read address
-    rd_addr_std := (input_center.asSInt + dx * input_depth.asSInt + dy * w * input_depth.asSInt).asUInt
+    rd_addr_std := (input_center.asSInt + dx * input_depth.asSInt + dy * timing_aux_regs(1).asSInt).asUInt
     // read address next cycle within region
-    rd_addr_inc_ds := (input_center.asSInt + dx_inc * input_depth.asSInt + dy_inc * w * input_depth.asSInt).asUInt
+    rd_addr_inc_ds := (input_center.asSInt + dx_inc * input_depth.asSInt + dy_inc * timing_aux_regs(1).asSInt).asUInt
     // read address next cycle in new region
-    rd_addr_inc_region := (input_center_inc_reg.asSInt - input_depth.asSInt - w * input_depth.asSInt).asUInt
+    rd_addr_inc_region := (input_center_inc_reg.asSInt - input_depth.asSInt - timing_aux_regs(1).asSInt).asUInt
     // center in new region in next cycle (i.e. when done with mask)
-    input_center_inc := (y_inc * w * input_depth.asSInt + x_inc * input_depth.asSInt + z.asSInt).asUInt + in_offset
+    input_center_inc := (y_inc * timing_aux_regs(1).asSInt + x_inc * input_depth.asSInt).asUInt + timing_aux_regs(3)
     // read address next cycle in new input convolution
     rd_addr_inc_z := ((w + 1.S) * input_depth.asSInt + z.asSInt + 1.S).asUInt + in_offset
     // read address after reset
     input_center_rst := ((w + 1.S) * input_depth.asSInt).asUInt + in_offset
     // read address in two cycles
-    rd_addr_two_inc := (input_center.asSInt + dx_two_inc * input_depth.asSInt + dy_two_inc * w * input_depth.asSInt).asUInt
+    rd_addr_two_inc := (input_center.asSInt + dx_two_inc * input_depth.asSInt + dy_two_inc * timing_aux_regs(1).asSInt).asUInt
     // address of requantization factor m
     m_address := ((io.shape_in(31, 24).asSInt + 1.S) * io.shape_in(15, 8)).asUInt + ~io.even * layer_offset
 
