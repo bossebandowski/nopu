@@ -27,6 +27,9 @@ class LayerConv() extends Layer {
     val input_center = RegInit(0.U(DATA_WIDTH.W))
     val input_center_inc_reg = RegInit(0.U(DATA_WIDTH.W))
     val timing_aux_regs = Reg(Vec(10, UInt(DATA_WIDTH.W)))
+    val tmp_res = RegInit(0.S(64.W))
+    val fact_a = RegInit(0.S(DATA_WIDTH.W))
+    val fact_b = RegInit(0.S(DATA_WIDTH.W))
 
     // aux wires
     val in_offset = Wire(UInt())
@@ -316,7 +319,8 @@ class LayerConv() extends Layer {
             /*
             just adds bias
             */
-            outs(0) := bs(0) + outs(0)
+            fact_a := bs(0) + outs(0)
+            fact_b := ms(count_a).asSInt
             state := conv_requantize
         }
         is(conv_requantize) {
@@ -325,21 +329,21 @@ class LayerConv() extends Layer {
             Multiply the output with the correct m factor and perform a 32 bit shift.
             This approximates a division
             */
-            tmp64(0) := (outs(0) * ms(count_a).asSInt) >> 32.U
+            tmp_res := (fact_a * fact_b) >> 32.U
             state := conv_apply_relu
         }
         is(conv_apply_relu) {
             /*
             cap the output activation to 8-bit unsigned int range
             */
-            when (tmp64(0)(31, 0).asSInt < 0.S) {
+            when (tmp_res(31, 0).asSInt < 0.S) {
                 outs(0) := 0.S
             }
-            .elsewhen (tmp64(0)(31, 0).asSInt > 255.S) {
+            .elsewhen (tmp_res(31, 0).asSInt > 255.S) {
                 outs(0) := 255.S
             }
             .otherwise {
-                outs(0) := tmp64(0)(31, 0).asSInt
+                outs(0) := tmp_res(31, 0).asSInt
             }
             state := conv_write_output
         }

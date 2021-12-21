@@ -69,7 +69,6 @@ class Layer() extends Module {
     val ws = Reg(Vec(16, SInt(8.W)))
     val outs = Reg(Vec(16, SInt(DATA_WIDTH.W)))
     val bs = Reg(Vec(4, SInt(DATA_WIDTH.W)))
-    val tmp64 = Reg(Vec(4, SInt(64.W)))
 
     // counts
     val count_a = RegInit(0.U(DATA_WIDTH.W))

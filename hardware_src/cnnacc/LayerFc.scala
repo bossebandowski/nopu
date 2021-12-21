@@ -19,6 +19,7 @@ class LayerFc() extends Layer {
     val M = RegInit(0.U(DATA_WIDTH.W))
     val in_val = RegInit(0.S(DATA_WIDTH.W))
     val activation = RegInit(0.U(DATA_WIDTH.W))
+    val tmp64 = Reg(Vec(4, SInt(64.W)))
     
     // wires
     val in_inc = Wire(UInt())
