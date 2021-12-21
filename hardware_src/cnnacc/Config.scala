@@ -10,7 +10,7 @@ object Config {
     val IMG_CHUNK_SIZE = 3072.U
     
     // states COP control
-    val idle :: start :: fc :: conv :: pool :: mem_r :: restart :: reset_memory :: next_layer :: layer_done :: read_output :: find_max :: save_max :: load_image :: write_bram :: clear_layer :: peek_bram :: set_offset :: config :: Nil = Enum(19)
+    val idle :: start :: fc :: conv :: pool :: mem_r :: mem_wr :: mem_addr_set :: restart :: reset_memory :: reset_memory_aux :: next_layer :: layer_done :: read_output :: find_max :: save_max :: clear_layer :: set_offset :: config :: Nil = Enum(19)
     // states FC layer
     val fc_idle :: fc_done :: fc_init :: fc_load_input :: fc_load_weight :: fc_load_output :: fc_mac :: fc_write_output :: fc_load_bias :: fc_add_bias :: fc_apply_relu :: fc_write_bias :: fc_requantize :: fc_load_m :: Nil = Enum(14)
     // states CONV layer

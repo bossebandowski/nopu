@@ -19,8 +19,6 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val stateReg = RegInit(0.U(8.W))
     val mem_state = RegInit(mem_idle)
 
-    val emulator = RegInit(true.B)
-
     // BRAM memory and default assignments
     val bram = Module(new BramControl())
     bram.io.wrEna := false.B
@@ -37,13 +35,9 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val burst_count_reg = RegInit(0.U(3.W))
     val maxOut = RegInit(0.U(DATA_WIDTH.W))
     val outAddr = RegInit(0.U(DATA_WIDTH.W))
-    val layer = RegInit(0.U(8.W))    
+    val layer = RegInit(0.U(8.W))
+    val img_val = RegInit(0.U(DATA_WIDTH.W))
     
-    // registers only needed to facilitate emulator
-    val emulator_address = RegInit(0.U(DATA_WIDTH.W))
-    val emulator_input = Reg(Vec(9, SInt(DATA_WIDTH.W)))
-    val emulator_count = RegInit(0.U(3.W))
-
     val outs = Reg(Vec(BURST_LENGTH, SInt(DATA_WIDTH.W)))
     val idx = RegInit(0.U(DATA_WIDTH.W))
     val curMax = RegInit(ABS_MIN.S(DATA_WIDTH.W))
@@ -62,6 +56,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
     val layer_meta_s_i = Reg(Vec(MAX_LAYERS, UInt(32.W)))       // layer sizes (for fc: number of nodes)
     val layer_meta_s_o = Reg(Vec(MAX_LAYERS, UInt(32.W)))       // layer sizes (for fc: number of nodes)
     val layer_meta_m = Reg(Vec(MAX_LAYERS, UInt(32.W)))
+    val maxLayerNodeCount = layer_meta_s_o(layer) + 16.U
 
 /* ================================================= LAYER HARDWARE INIT ============================================= */ 
 
@@ -241,16 +236,15 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 }
                 is(FUNC_LOAD_IMG) {
                     when(isIdle) {
-                        bram.io.wrEna := true.B
-                        bram.io.wrAddr := io.copIn.opData(0).asUInt
-                        bram.io.wrData := io.copIn.opData(1).asSInt
-                        emulator := false.B
+                        addrReg := io.copIn.opData(0).asUInt
+                        img_val := io.copIn.opData(1)
+                        stateReg := mem_wr
                     }
                 }
                 is(FUNC_MEM_R) {
                     when(isIdle) {
-                        bram.io.rdAddr := io.copIn.opData(0)
-                        stateReg := mem_r
+                        addrReg := io.copIn.opData(0)
+                        stateReg := mem_addr_set
                     }
                 }
             }
@@ -305,60 +299,26 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             layer := 0.U                                    // reset layer count
             idx := 0.U                                      // reset idx which is used to figure out the index of the maximum value in the output layer
             inCount := 0.U
-            emulator_count := 0.U
             outAddr := 0.U
-            when (emulator) {
-                stateReg := load_image                          // start inference by moving image to bram
-                emulator_address := image_address
-            }
-            .otherwise {
-                stateReg := next_layer
-            }
+            stateReg := next_layer
         }
-        is(load_image) {
-            /*
-            Read one burst of inputs
-            For full word inputs only
-            */
-
-            when (mem_state === mem_idle) {                   // wait until memory is ready
-                addrReg := emulator_address                           // load current input address
-                mem_state := mem_read_req                      // force memory into read request state
-            }
-
-            when (mem_state === mem_done) {                   // wait until transaction is finished
-                mem_state := mem_idle                         // mark memory as idle
-                stateReg := write_bram                      // load weights next
-                emulator_input(0) := mem_r_buffer(0).asSInt          // load 4 px
-                emulator_input(1) := mem_r_buffer(1).asSInt           
-                emulator_input(2) := mem_r_buffer(2).asSInt           
-                emulator_input(3) := mem_r_buffer(3).asSInt
-            }
-        }
-        is(write_bram) {
+        is(mem_wr) {
             /*
             write image into bram
             */
-            when (inCount === IMG_CHUNK_SIZE) {
-                stateReg := next_layer
-            }
-            .otherwise {
-                when (emulator_count < BURST_LENGTH.U) {
-                    bram.io.wrEna := true.B
-                    bram.io.wrAddr := outAddr
-                    bram.io.wrData := emulator_input(emulator_count)
+            bram.io.wrEna := true.B
+            bram.io.wrAddr := addrReg
+            bram.io.wrData := img_val.asSInt
 
-                    emulator_count := emulator_count + 1.U
-                    outAddr := outAddr + 1.U
-                    stateReg := write_bram
-                }
-                .otherwise {
-                    emulator_count := 0.U
-                    emulator_address := emulator_address + 16.U
-                    inCount := inCount + 4.U
-                    stateReg := load_image
-                }
-            }
+            stateReg := idle
+        }
+        is(mem_addr_set) {
+            bram.io.rdAddr := addrReg
+            stateReg := mem_r
+        }
+        is(mem_r) {
+            resReg := bram.io.rdData.asUInt
+            stateReg := idle
         }
         is(layer_done) {
             /*
@@ -435,7 +395,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             conv_layer.io.even := ~layer(0)
 
             when(conv_layer.io.state === conv_done) {
-                stateReg := idle // set_offset
+                stateReg := set_offset
                 conv_layer.io.ack := true.B
             }
         }
@@ -483,7 +443,7 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
                 bram.io.wrEna := true.B
                 bram.io.wrAddr := outAddr
                 bram.io.wrData := 0.S
-                
+
                 outCount := outCount + 1.U
                 outAddr := outAddr + 1.U
             }
@@ -537,21 +497,25 @@ class CnnAccelerator() extends CoprocessorMemoryAccess() {
             /*
             reset network nodes in last layer to 0 to be ready for next inference
             */
-            when(outCount < layer_meta_s_o(layer) + 16.U) {
-                bram.io.wrEna := true.B
-                bram.io.wrAddr := outAddr
-                bram.io.wrData := 0.S
-                
-                outCount := outCount + 1.U
-                outAddr := outAddr + 1.U
+            when(outCount < maxLayerNodeCount) {
+                stateReg := reset_memory_aux
             }
             .otherwise {
                 stateReg := idle
             }
         }
-        is(mem_r) {
-            stateReg := idle
-            resReg := bram.io.rdData.asUInt
+        is(reset_memory_aux) {
+            /*
+            doing this in reset memory state causes timing issues. Trying to delay bram access
+            */
+            bram.io.wrEna := true.B
+            bram.io.wrAddr := outAddr
+            bram.io.wrData := 0.S
+
+            outCount := outCount + 1.U
+            outAddr := outAddr + 1.U
+
+            stateReg := reset_memory
         }
         is(restart) {
             burst_count_reg := 0.U

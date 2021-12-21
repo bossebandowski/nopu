@@ -11,9 +11,11 @@
 const uint32_t IMAGE_LEN = 3072;
 int32_t img[IMAGE_LEN];
 
-void load_img()
+void load_img(img_id)
 {
-    cop_config(0, 7, &img[0]);
+    for (int idx = 0; idx < IMAGE_LEN; idx++) {
+        cop_send_px(idx, images[img_id][idx]);
+    }
 }
 
 void print_intermediate_layer_head(bool even, int offset, int count)
@@ -37,16 +39,12 @@ int run_inf() {
 }
 
 void run_emulator() {
-    // load nn parameters into desired memory space. In the future, this will hopefully be copying from flash to sram
     int res;
     int hwExecTime;
     load_nn_cifar_10();
-    load_img();
 
-    for (int id = 0; id < 1; id++) {
-        for (int idx = 0; idx < IMAGE_LEN; idx ++) {
-            img[idx] = images[id][idx];
-        }
+    for (int id = 0; id < 10; id++) {
+        load_img(id);
         cntReset();
         res = run_inf();
         hwExecTime = cntRead();
@@ -54,9 +52,9 @@ void run_emulator() {
     }
 
     printf("================================\n");
-    printf("gross execution time per inference (including img load): %d\n", hwExecTime);
+    printf("net execution time per inference (excluding img load): %d\n", hwExecTime);
 
-    print_intermediate_layer_head(true, 0, 1000);
+    // print_intermediate_layer_head(true, 0, 1000);
 }
 
 int main(int argc, char **argv)
