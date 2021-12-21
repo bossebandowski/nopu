@@ -43,7 +43,7 @@ class LayerConv() extends Layer {
     val wr_addr_std = Wire(UInt())
     val rd_addr_std = Wire(UInt())
     val rd_addr_inc_ds = Wire(UInt())
-    // val input_center_inc = Wire(UInt())
+    val input_center_inc = Wire(UInt())
     val rd_addr_inc_region = Wire(UInt())
     val rd_addr_inc_z = Wire(UInt())
     val input_center_rst = Wire(UInt())
@@ -101,20 +101,18 @@ class LayerConv() extends Layer {
     when (done_with_input_conv) {
         x_inc := 1.S
         y_inc := 1.S
-        input_center_inc_reg := timing_aux_regs(1) + input_depth + timing_aux_regs(3)
     }
     .elsewhen (done_with_row) {
         x_inc := 1.S
         y_inc := y + 1.S
-        input_center_inc_reg := (y * timing_aux_regs(1).asSInt + timing_aux_regs(1).asSInt).asUInt + input_depth + timing_aux_regs(3)
     }
     .otherwise {
         x_inc := x + 1.S
         y_inc := y
-        input_center_inc_reg := (timing_aux_regs(1).asSInt + x * input_depth.asSInt).asUInt + input_depth + timing_aux_regs(3)
     }
 
     // calculate in address (center of input map) one cycle ahead
+    input_center_inc_reg := input_center_inc
 
     // input and output locations in BRAM depend on whether the layer has an even index or not
     in_offset := ~even * layer_offset
@@ -134,6 +132,8 @@ class LayerConv() extends Layer {
     rd_addr_inc_ds := (input_center.asSInt + dx_inc * input_depth.asSInt + dy_inc * timing_aux_regs(1).asSInt).asUInt
     // read address next cycle in new region
     rd_addr_inc_region := (input_center_inc_reg.asSInt - input_depth.asSInt - timing_aux_regs(1).asSInt).asUInt
+    // center in new region in next cycle (i.e. when done with mask)
+    input_center_inc := (y_inc * timing_aux_regs(1).asSInt + x_inc * input_depth.asSInt).asUInt + timing_aux_regs(3)
     // read address next cycle in new input convolution
     rd_addr_inc_z := ((w + 1.S) * input_depth.asSInt + z.asSInt + 1.S).asUInt + in_offset
     // read address after reset
@@ -376,7 +376,7 @@ class LayerConv() extends Layer {
                 }                    
             }
             .otherwise {                                                        // just continue with current 2d slice of input
-                input_center := input_center_inc_reg                            // set read address
+                input_center := input_center_inc                                // set read address
                 bram_addr_reg := rd_addr_inc_region                             // prepare read address for next cycle
                 state := conv_wr_addr_set
             }
