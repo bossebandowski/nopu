@@ -43,7 +43,7 @@ void run_emulator() {
     int hwExecTime;
     load_nn_cifar_10();
 
-    for (int id = 0; id < 10; id++) {
+    for (int id = 0; id < 1; id++) {
         load_img(id);
         cntReset();
         res = run_inf();
@@ -54,7 +54,7 @@ void run_emulator() {
     printf("================================\n");
     printf("net execution time per inference (excluding img load): %d\n", hwExecTime);
 
-    // print_intermediate_layer_head(true, 0, 1000);
+    print_intermediate_layer_head(true, 0, 2000);
 }
 
 int main(int argc, char **argv)
