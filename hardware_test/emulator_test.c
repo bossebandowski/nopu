@@ -54,7 +54,7 @@ void run_emulator() {
     printf("================================\n");
     printf("net execution time per inference (excluding img load): %d\n", hwExecTime);
 
-    // print_intermediate_layer_head(true, 0, 1000);
+    // print_intermediate_layer_head(true, 0, 2000);
 }
 
 int main(int argc, char **argv)

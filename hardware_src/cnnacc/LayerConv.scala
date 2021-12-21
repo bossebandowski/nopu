@@ -101,14 +101,17 @@ class LayerConv() extends Layer {
     when (done_with_input_conv) {
         x_inc := 1.S
         y_inc := 1.S
+        input_center_inc := timing_aux_regs(1) + input_depth + timing_aux_regs(3)
     }
     .elsewhen (done_with_row) {
         x_inc := 1.S
         y_inc := y + 1.S
+        input_center_inc := timing_aux_regs(5) + timing_aux_regs(1) + timing_aux_regs(4)
     }
     .otherwise {
         x_inc := x + 1.S
         y_inc := y
+        input_center_inc := timing_aux_regs(5) + x.asUInt * input_depth + timing_aux_regs(4)
     }
 
     // calculate in address (center of input map) one cycle ahead
@@ -123,6 +126,8 @@ class LayerConv() extends Layer {
     timing_aux_regs(1) := w.asUInt * input_depth
     timing_aux_regs(2) := count_a + out_offset
     timing_aux_regs(3) := z + in_offset
+    timing_aux_regs(4) := timing_aux_regs(3) + input_depth
+    timing_aux_regs(5) := y.asUInt * timing_aux_regs(1)
 
     // write address
     wr_addr_std := ((y - 1.S) * timing_aux_regs(0).asUInt + (x - 1.S) * output_depth.asSInt).asUInt + timing_aux_regs(2)
@@ -132,8 +137,6 @@ class LayerConv() extends Layer {
     rd_addr_inc_ds := (input_center.asSInt + dx_inc * input_depth.asSInt + dy_inc * timing_aux_regs(1).asSInt).asUInt
     // read address next cycle in new region
     rd_addr_inc_region := (input_center_inc_reg.asSInt - input_depth.asSInt - timing_aux_regs(1).asSInt).asUInt
-    // center in new region in next cycle (i.e. when done with mask)
-    input_center_inc := (y_inc * timing_aux_regs(1).asSInt + x_inc * input_depth.asSInt).asUInt + timing_aux_regs(3)
     // read address next cycle in new input convolution
     rd_addr_inc_z := ((w + 1.S) * input_depth.asSInt + z.asSInt + 1.S).asUInt + in_offset
     // read address after reset
