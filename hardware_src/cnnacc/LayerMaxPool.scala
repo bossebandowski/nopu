@@ -62,28 +62,34 @@ class LayerMaxPool() extends Layer {
     when (done_with_mask) {
         dx_inc := 0.S
         dy_inc := 0.S    
+        rd_addr_inc_mask := timing_aux_regs(5) * timing_aux_regs(4) + timing_aux_regs(6) * input_depth + timing_aux_regs(1)
     }
     .elsewhen (done_with_dxs) {
         dx_inc := 0.S
         dy_inc := dy + 1.S
+        rd_addr_inc_mask := timing_aux_regs(7) + dy.asUInt * timing_aux_regs(4) + timing_aux_regs(4) + timing_aux_regs(9) + timing_aux_regs(1)
     }
     .otherwise {
         dx_inc := dx + 1.S
         dy_inc := dy
+        rd_addr_inc_mask := timing_aux_regs(5) * timing_aux_regs(4) + dy.asUInt * timing_aux_regs(4) + (timing_aux_regs(6) + dx.asUInt) * input_depth + input_depth + timing_aux_regs(1)
     }
 
     // calculate next x and y
     when (done_with_conv) {
         x_inc := 0.S
         y_inc := 0.S
+        rd_addr_inc_conv := timing_aux_regs(1)
     }
     .elsewhen(done_with_row) {
         x_inc := 0.S
         y_inc := y + 1.S
+        rd_addr_inc_conv := ((stride_length * y_inc) * timing_aux_regs(4).asSInt).asUInt + timing_aux_regs(1)
     }
     .otherwise {
         x_inc := x + 1.S
         y_inc := y
+        rd_addr_inc_conv := timing_aux_regs(5) * timing_aux_regs(4) + x.asUInt * timing_aux_regs(8) + timing_aux_regs(8) + timing_aux_regs(1)
     }
 
     // a few timing aux regs to prevent timing issues during bram address setting
@@ -95,13 +101,14 @@ class LayerMaxPool() extends Layer {
     timing_aux_regs(5) := (stride_length * y).asUInt
     timing_aux_regs(6) := (stride_length * x).asUInt
     timing_aux_regs(7) := timing_aux_regs(5) * timing_aux_regs(4) 
+    timing_aux_regs(8) := stride_length.asUInt * input_depth
+    timing_aux_regs(9) := timing_aux_regs(6) * input_depth 
+
 
 
     // standard write and read addresses
     wr_addr := timing_aux_regs(0) + timing_aux_regs(2) + timing_aux_regs(3)
     // read address of next cycle
-    rd_addr_inc_mask := (timing_aux_regs(5).asSInt * timing_aux_regs(4).asSInt + dy_inc * timing_aux_regs(4).asSInt + (timing_aux_regs(6).asSInt + dx_inc) * input_depth.asSInt).asUInt + timing_aux_regs(1)
-    rd_addr_inc_conv := ((stride_length * y_inc) * timing_aux_regs(4).asSInt + (stride_length * x_inc) * input_depth.asSInt).asUInt + timing_aux_regs(1)
 
     /* ================================================= CMD HANDLING ============================================ */
 
