@@ -96,10 +96,10 @@ def extract_layer_parameters(layers):
     return out
 
 def extract_real_layer_id(name):
-    try:
+    if len(name.split("/")) == 2:
+        return int(name.split("/")[0].split("_")[-1])
+    else:
         return int(name.split("/")[1].split("_")[-1])
-    except:
-        return -1
 
 def extract_layer_parameters_qat(layers):
     biases = {}
