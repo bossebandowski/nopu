@@ -95,27 +95,44 @@ def extract_layer_parameters(layers):
 
     return out
 
+def extract_real_layer_id(name):
+    try:
+        return int(name.split("/")[1].split("_")[-1])
+    except:
+        return -1
+
 def extract_layer_parameters_qat(layers):
+    biases = {}
+    fcs = {}
+    convs = {}
+    activations = {}
     out = header
-    bias_s = []
-    activation_s = []
 
     for layer_id in layers.keys():
-        name = layers[layer_id]["name"] 
-
+        name = layers[layer_id]["name"]
         if "/MatMul" in name and not "/BiasAdd" in name:
-            out += parse_fc_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_fc")
+            fcs[extract_real_layer_id(name)] = layers[layer_id]["tensor"]
         elif ("/bias" in name and not "quant" in name) or ("/BiasAdd" in name and not ";" in name):
-            out += parse_biases(layers[layer_id]["tensor"], f"param_{layer_id}_b")
-            bias_s.append(layers[layer_id]["qp"]["scales"])
-            print(name)
+            biases[extract_real_layer_id(name)] = (layers[layer_id]["tensor"], layers[layer_id]["qp"]["scales"])
         elif "/Conv2D" in name and not "/BiasAdd" in name:
-            out += parse_conv_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_conv")
+            convs[extract_real_layer_id(name)] = layers[layer_id]["tensor"]
         elif "/Relu;" in name:
-            activation_s.append(layers[layer_id]["qp"]["scales"])
+            activations[extract_real_layer_id(name)] = layers[layer_id]["qp"]["scales"]
 
-    for i in range(len(bias_s) - 1):
-        out += parse_m(bias_s[i] / activation_s[i], i)
+    for key in sorted(convs):
+        out += parse_conv_weights(convs[key], f"param_{key}_w_conv")
+
+    for key in sorted(fcs):
+        out += parse_fc_weights(fcs[key], f"param_{key}_w_fc")
+
+    for key in sorted(biases):
+        tensor, _ = biases[key]
+        out += parse_biases(tensor, f"param_{key}_b")
+
+    for key in sorted(activations):
+        _, bias_scale = biases[key]
+        activation_scale = activations[key]
+        out += parse_m(bias_scale / activation_scale, key)
 
     return out
 
