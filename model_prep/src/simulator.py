@@ -74,7 +74,7 @@ def get_layer_ids(layers):
         name = layers[layer_id]["name"]
         if "/MatMul" in name and not "/BiasAdd" in name:
             fcs.append(layer_id)
-        elif "/bias" in name and not "quant" in name:
+        elif ("/bias" in name and not "quant" in name) or ("/BiasAdd" in name and not ";" in name):
             bas.append(layer_id)
         elif "/Conv2D" in name and not "/BiasAdd" in name:
             convs.append(layer_id)
@@ -88,9 +88,8 @@ def find_ms(layers):
 
     for layer_id in layers.keys():
         name = layers[layer_id]["name"]
-        if "/bias" in name and not "quant" in name:
+        if ("/bias" in name and not "quant" in name) or ("/BiasAdd" in name and not ";" in name):
             bias_s.append(layers[layer_id]["qp"]["scales"])
-
         elif "/Relu" in name:
             activation_s.append(layers[layer_id]["qp"]["scales"])
 
@@ -393,6 +392,50 @@ def process_model_cifar(nodes, img, weights, filters, biases, Ms):
 
     return np.argmax(nodes[-1])
 
+def process_model_cifar_advanced(nodes, img, weights, filters, biases, Ms):
+    # layer 0: conv 3x3
+    conv(img, nodes, filters, 0, (32, 32, 3), 0)
+    bias_conv(nodes[0], biases[0])
+    requantize_activations(nodes, 0, Ms[0], True)
+    relu(nodes[0], True)
+    type_cast(nodes, 0)
+
+    # layer 1: max-pool (2x2)
+    max_pool(nodes, (30, 30, 32), (15, 15, 32), (2, 2), 1)
+
+    # layer 2: conv 3x3
+    conv(nodes[1], nodes, filters, 2, (15, 15, 32), 1)
+    bias_conv(nodes[2], biases[1])
+    requantize_activations(nodes, 2, Ms[1], True)
+    relu(nodes[2], True)
+    type_cast(nodes, 2)
+
+    # layer 3: max-pool (2x2)
+    max_pool(nodes, (13, 13, 64), (6, 6, 64), (2, 2), 3)
+
+    # layer 4: conv 3x3
+    conv(nodes[3], nodes, filters, 4, (4, 4, 64), 2)
+    bias_conv(nodes[4], biases[2])
+    requantize_activations(nodes, 4, Ms[2], True)
+    relu(nodes[4], True)
+    type_cast(nodes, 4)
+
+    # flatten
+    flatten(nodes, 4)
+
+    # layer 5: fc
+    mac_fc(nodes[4], nodes[5], weights, 0)    
+    bias(nodes[5], biases[3])
+    requantize_activations(nodes, 5, Ms[3], False)
+    relu(nodes[5], False)
+    type_cast(nodes, 5)
+
+    # layer 6: fc
+    mac_fc(nodes[5], nodes[6], weights, 1)
+    bias(nodes[6], biases[4])
+
+    return np.argmax(nodes[-1])
+
 def print_nodes(nodes, layer, num_nodes, offset):
     if len(nodes[layer].shape) > 1:
         flatten(nodes, layer)
@@ -433,6 +476,8 @@ if __name__ == "__main__":
         process = process_model_min_pool
     elif args["type"] == "cifar":
         process = process_model_cifar
+    elif args["type"] == "cifar_advanced":
+        process = process_model_cifar_advanced
     else:
         print("unknown model architecture descriptor. Exiting...")
         sys.exit(0)

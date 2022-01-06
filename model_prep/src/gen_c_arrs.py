@@ -97,21 +97,18 @@ def extract_layer_parameters(layers):
 
 def extract_layer_parameters_qat(layers):
     out = header
-    ms_string = ""
     bias_s = []
     activation_s = []
-    Ms = []
 
     for layer_id in layers.keys():
         name = layers[layer_id]["name"] 
-        print(name)
-        
 
         if "/MatMul" in name and not "/BiasAdd" in name:
             out += parse_fc_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_fc")
-        elif "/bias" in name and not "quant" in name:
+        elif ("/bias" in name and not "quant" in name) or ("/BiasAdd" in name and not ";" in name):
             out += parse_biases(layers[layer_id]["tensor"], f"param_{layer_id}_b")
             bias_s.append(layers[layer_id]["qp"]["scales"])
+            print(name)
         elif "/Conv2D" in name and not "/BiasAdd" in name:
             out += parse_conv_weights(layers[layer_id]["tensor"], f"param_{layer_id}_w_conv")
         elif "/Relu;" in name:
