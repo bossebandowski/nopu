@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-DESCRIPTOR_LIST = ["basic_fc", "three_fc", "basic_conv", "min_conv", "min_pool", "cifar", "imgnet"]
+DESCRIPTOR_LIST = ["basic_fc", "three_fc", "basic_conv", "min_conv", "min_pool", "cifar", "cifar_advanced"]
 
 basic_fc_model = tf.keras.Sequential(
     [
@@ -40,6 +40,19 @@ cifar_conv_model = tf.keras.Sequential(
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(64, activation="relu"),
         tf.keras.layers.Dense(12),
+    ]
+)
+
+cifar_advanced_model = tf.keras.Sequential(
+    [
+        tf.keras.layers.Conv2D(32, (3, 3), activation="relu", input_shape=(32, 32, 3)),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Conv2D(64, (3, 3), activation="relu"),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Conv2D(64, (3, 3), activation="relu"),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(64, activation="relu"),
+        tf.keras.layers.Dense(10),
     ]
 )
 
@@ -100,9 +113,7 @@ def get_model(descriptor):
         return minimal_pool_model
     elif descriptor == "cifar":
         return cifar_conv_model
-        """
-    elif descriptor == "imgnet":
-        return imgnet_64_model
-        """
+    elif descriptor == "cifar_advanced":
+        return cifar_advanced_model
     else:
         raise ValueError("Model descriptor unknown!")
