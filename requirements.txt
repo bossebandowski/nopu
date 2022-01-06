@@ -4,3 +4,4 @@ protobuf
 tensorflow_model_optimization
 tensorflow_datasets
 opencv-python
+pandas
