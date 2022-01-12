@@ -22,6 +22,7 @@ import data_loader
 import tensorflow as tf
 import tensorflow_model_optimization as tfmot
 import numpy as np
+import sys
 
 # constants
 MODEL_SAVE_PATH = "../models/model.pt"
@@ -64,6 +65,9 @@ def run_tflite_model(tflite_file, test_image_indices, test_set):
         if input_details["dtype"] == np.uint8:
             input_scale, input_zero_point = input_details["quantization"]
             test_image = test_image / input_scale + input_zero_point
+        else:
+            print("input not quantized!")
+            sys.exit()
 
         test_image = np.expand_dims(test_image, axis=0).astype(input_details["dtype"])
         interpreter.set_tensor(input_details["index"], test_image)
@@ -157,6 +161,11 @@ def qat_8x32(train_set, model, path):
 def quantize_8x32_qat(model, path):
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
+
+    print("setting input type to uint8")
+    converter.inference_input_type = tf.uint8
+    converter.inference_output_type = tf.uint8
+    print("done")
 
     tflite_model_quant = converter.convert()
     
