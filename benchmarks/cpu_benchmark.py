@@ -27,7 +27,7 @@ def main():
 
     row_idx = 0
     for round in range(NUM_ROUNDS):
-        print(f"round {round}/{NUM_ROUNDS}")
+        print(f"round {round + 1}/{NUM_ROUNDS}")
         # iterate over the entire dataset
         for idx in range(NUM_IMGS): 
             # reformat input image to batch of size 1
