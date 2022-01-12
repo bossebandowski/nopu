@@ -8,6 +8,8 @@ model_prep/datasets/*
 model_prep/tmp/*
 python-nopu/*.jpg
 benchmarks/results/*
+benchmarks/model/*
+benchmarks/test_data/*
 tmp
 
 # hardware_test/images.h
