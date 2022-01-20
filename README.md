@@ -1,20 +1,39 @@
 # nopu
 
-## Release Notes v1.5
+## Release Notes v1.6
 
-- Still cifar10 dataset (image classification on small 3-channel input images. Input shape (32x32x3))
+- Cifar10 dataset (image classification on small 3-channel input images. Input shape (32x32x3))
 - model architecture has not changed since release 1.3
-- established ethernet communication channel between host machine and FPGA
-- host sends input images and the FPGA returns the inference results
-- started implementing basic handshakes on top of UDP. FPGA acknowledges the arrival of image data, the host resends image chunks of ACK is missing
-- split tests into emulator and hardware tests because the emulator is not capable of handling ethernet io
+- includes optimization that reduce the inference time to 1405550 clock cycles
+- includes benchmark scripts for speed and power tests
+- cleaned up repo and removed generated files (parameters, models, etc)
 
 ## Setup and Run
 
 - Build patmos
 follow the instructions on `https://github.com/t-crest/patmos`
 
-- Clone this repo and use the scripts to build patmos plus the coprocessor and run a test script in the emulator or on actual hardware. Careful if you are developing in your `~/t-crest/patmos` folder, these scripts might overwrite some files.
+- Clone this repo
+    ```
+    git clone https://github.com/bossebandowski/nopu.git
+    ```
+- Prepare a model
+    ```
+    python3 -m venv venv
+    # windows
+    venv\Scripts\activate
+    # linux
+    source venv/bin/activate
+
+    pip install -U pip cython setuptools wheel
+    pip install -r requirements.txt
+
+    cd model_prep/src
+    python quant_pipeline.py -m cifar -ds cifar --train --qat
+    python gen_c_arrs.py
+    ```
+
+- Use the supplied scripts to build patmos plus the coprocessor and run a test script in the emulator or on actual hardware. Careful if you are developing in your `~/t-crest/patmos` folder, these scripts might overwrite some files.
 
 1) Emulator
     ```
@@ -63,17 +82,6 @@ follow the instructions on `https://github.com/t-crest/patmos`
         Reply from 192.168.24.50: bytes=32 time=1ms TTL=128
         ```
         if this does not work, try to update your network settings or reprogram the FPGA
-    - create a venv and install requirements
-        ```
-        python3 -m venv venv
-        # windows
-        venv\Scripts\activate
-        # linux
-        source venv/bin/activate
-
-        pip install -U pip cython setuptools wheel
-        pip install -r model_prep/requirements.txt
-        ```
     - run inference script to send test images to the FPGA and evaluate the output
         ```
         cd python-nopu
@@ -81,7 +89,6 @@ follow the instructions on `https://github.com/t-crest/patmos`
         ```
 
 ## Results
-
 
 - **Emulator output**
     ```
@@ -96,7 +103,7 @@ follow the instructions on `https://github.com/t-crest/patmos`
     EXPECTED 3, RETURNED 3
     EXPECTED 0, RETURNED 1
     ================================
-    gross execution time per inference (including img load): 3216962
+    gross execution time per inference (including img load): 1405550
     ```
 
 - **Hardware output (on host console)**
@@ -115,10 +122,10 @@ follow the instructions on `https://github.com/t-crest/patmos`
     average time: 0.06239337921142578
     ```
 - **Speed**
-    - clock cycles per inference (net): 3216974
-    - seconds per inference (gross, including communication with host): 0.06s (can vary due to communication delays)
+    - clock cycles per inference (net): 1405550
+    - seconds per inference (gross, including communication with host): 0.028s (can vary due to communication delays)
     - max frequency: 80 MHz
-    - inferences per second: 24.87
+    - inferences per second: 35
 
 - **Memory requirements**
 
@@ -137,4 +144,4 @@ follow the instructions on `https://github.com/t-crest/patmos`
     | **sum** | | | **53.8**
 
 - **Accuracy**
-64%
+65%
