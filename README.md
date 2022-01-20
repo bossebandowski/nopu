@@ -1,5 +1,9 @@
 # nopu
 
+## What is this?
+
+This repo includes design and test files for a neural network hardware accelerator on FPGA. It is written in Chisel3 and implemented as a coprocessor to the open-source RISC-based Patmos processor. Currently, the accelerator supports convolutional, max-pooling, and fully connected layers. You can run it in an emulator or program it on an FPGA (verified with the Altera DE2-115 board with Cyclone IV FPGA) and interface to it via Ethernet.
+
 ## Release Notes v1.6
 
 - Cifar10 dataset (image classification on small 3-channel input images. Input shape (32x32x3))
@@ -31,7 +35,17 @@ follow the instructions on `https://github.com/t-crest/patmos`
     cd model_prep/src
     python quant_pipeline.py -m cifar -ds cifar --train --qat
     python gen_c_arrs.py
+    cd ../..
     ```
+
+    I have oberserved that some TF versions have problems with `quant_pipeline.py`. If it crashes, try to comment out the following two lines:
+    ```
+    165     # converter.inference_input_type = tf.uint8
+    166     # converter.inference_output_type = tf.uint8
+    ```
+    These IO type conversions are only needed to run the model on the Coral Edge TPU and do not affect the accelerator itself.
+
+- Verify that the network parameter array names in `model_parameters/parameters.h` and `hardware_test/network-configs.h` match.
 
 - Use the supplied scripts to build patmos plus the coprocessor and run a test script in the emulator or on actual hardware. Careful if you are developing in your `~/t-crest/patmos` folder, these scripts might overwrite some files.
 
@@ -95,15 +109,15 @@ follow the instructions on `https://github.com/t-crest/patmos`
     EXPECTED 3, RETURNED 3
     EXPECTED 8, RETURNED 8
     EXPECTED 8, RETURNED 8
-    EXPECTED 0, RETURNED 0
-    EXPECTED 6, RETURNED 4
+    EXPECTED 0, RETURNED 8
+    EXPECTED 6, RETURNED 6
     EXPECTED 6, RETURNED 6
     EXPECTED 1, RETURNED 1
     EXPECTED 6, RETURNED 6
     EXPECTED 3, RETURNED 3
     EXPECTED 0, RETURNED 1
     ================================
-    gross execution time per inference (including img load): 1405550
+    net execution time per inference (excluding img load): 1405550
     ```
 
 - **Hardware output (on host console)**

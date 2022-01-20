@@ -6,11 +6,14 @@ model_prep/model_eval/outputs/*
 model_prep/models/*
 model_prep/datasets/*
 model_prep/tmp/*
+model_parameters/*
 python-nopu/*.jpg
 benchmarks/results/*
 benchmarks/model/*
 benchmarks/test_data/*
 tmp
+venv
+.venv
 
 # hardware_test/images.h
 

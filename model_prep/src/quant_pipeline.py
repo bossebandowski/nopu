@@ -162,10 +162,8 @@ def quantize_8x32_qat(model, path):
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
 
-    print("setting input type to uint8")
     converter.inference_input_type = tf.uint8
     converter.inference_output_type = tf.uint8
-    print("done")
 
     tflite_model_quant = converter.convert()
     
